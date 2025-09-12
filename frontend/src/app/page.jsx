@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 
 function AdminPage() {
 
-    redirect('/admin/login');
+    // redirect('/user');
 
 //   return (
 //     <div>AdminPage</div>

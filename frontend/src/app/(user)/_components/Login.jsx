@@ -19,7 +19,7 @@ function Login() {
             setError("Enter a valid 10-digit number");
             return
         } else {
-           router.push(`/OTP?number=${number}`);
+            router.push(`/OTP?number=${number}`);
         }
     };
 
