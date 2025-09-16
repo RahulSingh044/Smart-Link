@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://10.21.139.182:5000";
+const API_BASE_URL = "http://localhost:5000";
 export const getBuses = async (page = 1, pageSize = 10) => {
     const res = await axios.get(`${API_BASE_URL}/api/buses`, {
         params: { page, pageSize },
@@ -31,7 +31,7 @@ export const getBusDataById = async (id) => {
 }
 
 export const updateBusData = async (id, busData) => {
-    console.log("API Update Payload:", id,busData);
+    console.log("API Update Payload:", id, busData);
     const res = await axios.patch(`${API_BASE_URL}/api/buses/${id}`, busData, {
         headers: {
             Authorization: `Bearer ${localStorage.getItem("userAuth")}`,
@@ -40,7 +40,7 @@ export const updateBusData = async (id, busData) => {
     return res.data.bus;
 }
 
-export const getStation = async(page = 1, limit = 10) => {
+export const getStation = async (page = 1, limit = 10) => {
     const res = await axios.get(`${API_BASE_URL}/api/stations`, {
         params: { page, limit }
     });
@@ -62,20 +62,32 @@ export const getStationById = async (id) => {
     }
 }
 
-export const fetchTrip = async(id) => {
-    try{
+export const fetchTrip = async (id) => {
+    try {
         const res = await axios.get(`${API_BASE_URL}/api/trip/${id}`);
         return res.data;
-    } catch(error) {
+    } catch (error) {
         console.log(error);
     }
 }
 
-export const fetchRouteById = async(id= R003) => {
-    try{
+export const fetchRouteById = async (id = R003) => {
+    try {
         const res = await axios.get(`${API_BASE_URL}/api/routes/${id}`);
         return res.data;
-    } catch(error) {
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+export const getNearbyStats = async (lon = 75.829387, lat = 30.236568, limit = 2) => {
+    try {
+        const res = await axios.get(`${API_BASE_URL}/api/nearby`, {
+            params: { lon, lat, limit }
+        });
+
+        return res.data;
+    } catch (error) {
         console.log(error);
     }
 }

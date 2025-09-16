@@ -12,7 +12,6 @@ export const useStation = (page = 1, limit = 10) => {
         setLoading(true);
         try {
             const res = await getStation(page, limit);
-            console.log("Api station", res.data)
             setStation(res.data);
             setTotalPages(res.pagination.totalPages)
             setCount(res.counts)
