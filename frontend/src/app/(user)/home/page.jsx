@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Search, MapPin, Flag, BusFront } from 'lucide-react';
 import Header from '../_components/Header';
 import { useRouter } from 'next/navigation';
@@ -7,6 +7,10 @@ import BottomNavbar from '../_components/BottomNavbar';
 import NearbyStop from '../_components/NearbyStops';
 import HomePageSkeleton from '../_components/HomePageLoadingSkeleton';
 import { useStation } from '@/hooks/useStation';
+import { useNearby } from '@/hooks/useNearby';
+import { getDistanceFromLatLon } from '@/app/utils/getDistanceFromLocation';
+import DirectionsMap from '../_components/DirectionMap';
+import { getRoute } from '@/app/utils/getDistanceFromLocation';
 
 const QuickActionButton = ({ icon, label }) => (
     <div className="bg-white p-4 rounded-2xl shadow-sm text-center flex flex-col items-center justify-center gap-2 cursor-pointer hover:shadow-md transition">
@@ -23,11 +27,29 @@ export default function HomePage() {
     const [showFromSuggestions, setShowFromSuggestions] = useState(false);
     const [showToSuggestions, setShowToSuggestions] = useState(false);
 
-    const { station, loading, error } = useStation(1,1000);
+    const [selectedStop, setSelectedStop] = useState(null);
+    const [routeGeometry, setRouteGeometry] = useState(null);
+
+    const { station, loading, error } = useStation(1, 1000);
+    const { data } = useNearby();
+    console.log("Nearby", data)
+
     const router = useRouter();
 
+    // Fetch route when a stop is selected
+    useEffect(() => {
+        if (!selectedStop) return;
+
+        const start = { lon: 75.829387, lat: 30.236568 }; // Example current location
+        const end = { lon: selectedStop.lon, lat: selectedStop.lat };
+
+        getRoute(start, end)
+            .then(setRouteGeometry)
+            .catch((err) => console.error("Route error:", err));
+    }, [selectedStop]);
+
     const handleSearch = () => {
-        console.log("Search Result", from , to)
+        // console.log("Search Result", from , to)
         router.push(`/bus-search?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
     };
 
@@ -55,7 +77,7 @@ export default function HomePage() {
         }
     }, [to, station]);
 
-    if(loading) {
+    if (loading) {
         return <HomePageSkeleton />
     }
 
@@ -118,9 +140,9 @@ export default function HomePage() {
                                 </ul>
                             )}
                         </div>
-                        <button 
-                        onClick={handleSearch}
-                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg shadow-md hover:bg-blue-700 flex items-center justify-center gap-2">
+                        <button
+                            onClick={handleSearch}
+                            className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg shadow-md hover:bg-blue-700 flex items-center justify-center gap-2">
                             <Search className="w-5 h-5" /> Search Buses
                         </button>
                     </div>
@@ -136,10 +158,39 @@ export default function HomePage() {
                 <div className="mb-6">
                     <h3 className="font-semibold text-gray-800 mb-3">Nearby Stops</h3>
                     <div className="space-y-3">
-                        <NearbyStop name="Swargate Bus Stand" distance="500m away" liveBuses={3} />
-                        <NearbyStop name="Pune Station" distance="2.1km away" liveBuses={5} />
+                        {data.map((nearby, index) => {
+                            const lon = nearby.location.coordinates[0];
+                            const lat = nearby.location.coordinates[1];
+                            const distance = getDistanceFromLatLon(30.236568, 75.829387, lat, lon);
+                            return (
+                                <NearbyStop
+                                    key={index}
+                                    name={nearby.name}
+                                    city={nearby.location.address.city}
+                                    street={nearby.location.address.street}
+                                    distance={distance}
+                                    onClick={() => setSelectedStop({ lat, lon })}
+                                />
+                            );
+                        })}
                     </div>
                 </div>
+
+                {/* Show Map when a stop is clicked */}
+                {selectedStop && (
+                    <div className="mt-4">
+                        <DirectionsMap lon={selectedStop.lon} lat={selectedStop.lat} route={routeGeometry} />
+                        <button
+                            onClick={() => {
+                                setSelectedStop(null);
+                                setRouteGeometry(null);
+                            }}
+                            className="mt-2 px-3 py-1 bg-red-500 text-white rounded-md"
+                        >
+                            Close
+                        </button>
+                    </div>
+                )}
 
                 {/* My Ticket */}
                 <div>
