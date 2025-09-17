@@ -3,7 +3,7 @@ const Stop = require('../models/stop');
 
 module.exports = {
     // Function to find nearer points (stations and stops) within a given radius
-    findNearerPoints: async (latitude, longitude, limit) => {
+    findNearerPoints: async (latitude, longitude, limit, skip = 0) => {
         try {
             // Nearest stops
             const nearestStops = await Stop.find({
@@ -14,7 +14,7 @@ module.exports = {
                         $maxDistance: 2000 // meters
                     }
                 }
-            }).limit(limit)
+            }).limit(limit).skip(skip*limit);
 
             // Nearest stations
             const nearestStations = await Station.find({
@@ -25,7 +25,7 @@ module.exports = {
                         $maxDistance: 5000 // meters
                     }
                 }
-            }).limit(limit);
+            }).limit(limit).skip(skip*limit);
 
             return {stops: nearestStops, stations: nearestStations};
         } catch (error) {

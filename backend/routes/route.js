@@ -4,7 +4,12 @@ const mongoose = require('mongoose');
 const Route = require('../models/route');
 const { verifyUser } = require('../middleware/authMiddleware');
 const { create } = require('../models/driver');
-const Trip = require('../models/trip');
+
+const Station = require('../models/station');
+const Stop = require('../models/stop');
+const { default: axios } = require('axios');
+const OSRM_API = process.env.OSRM_API;
+
 
 // Helper function to convert HH:mm to minutes since midnight
 const timeStringToMinutes = (timeString) => {
@@ -19,41 +24,7 @@ const minutesToTimeString = (minutes) => {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 };
 
-async function generateTripsForRoute(routeId, timing) {
-  if (!timing || !timing.firstTrip || !timing.lastTrip || !timing.frequency) {
-    throw new Error('Invalid timing object provided');
-  }
 
-  const firstTripMinutes = timeStringToMinutes(timing.firstTrip);
-  const lastTripMinutes = timeStringToMinutes(timing.lastTrip);
-  const frequency = timing.frequency;
-
-  // Handle case where last trip is on next day
-  const totalMinutes = lastTripMinutes < firstTripMinutes
-    ? (lastTripMinutes + 24 * 60) - firstTripMinutes
-    : lastTripMinutes - firstTripMinutes;
-
-  const numberOfTrips = Math.floor(totalMinutes / frequency) + 1;
-
-  const createdTrips = [];
-
-  for (let i = 0; i < numberOfTrips; i++) {
-    const tripTimeMinutes = (firstTripMinutes + i * frequency) % (24 * 60);
-    const tripTime = minutesToTimeString(tripTimeMinutes);
-
-    try {
-      const trip = await Trip.createTrip(routeId, tripTime);
-      createdTrips.push(trip);
-    } catch (err) {
-      console.error(`Failed to create trip at ${tripTime}:`, err);
-    }
-  }
-
-  // Return array of trip IDs
-  return createdTrips
-    .filter(trip => trip && trip._id)
-    .map(trip => trip._id);
-}
 
 // GET - Get all routes (paginated, Admin only)
 router.get('/', async (req, res) => {
@@ -78,14 +49,11 @@ router.get('/', async (req, res) => {
     const routes = await Route.find()
       .skip(skip)
       .limit(limit)
-      .populate('startStation', 'location name')
-      .populate('endStation', 'location name')
       .populate({
-        path: 'stops.pointId',
+        path: 'journey.pointId',
         select: 'location name',
-        model: doc => mongoose.model(doc.pointType)
+        model: doc => mongoose.model(doc.journey.pointType)
       })
-      .populate('trips')
       .lean();
 
     res.json({
@@ -117,19 +85,10 @@ router.get('/:code', async (req, res) => {
     // }
 
     const route = await Route.findOne({ code: req.params.code })
-      .populate('startStation', 'location name')
-      .populate('endStation', 'location name')
-      // .populate({
-      //   path: 'stops.pointId',
-      //   select: 'location name',
-      //   model: doc => mongoose.model(doc.pointType)
-      // })
       .populate({
-        path: 'trips',
-        populate: {
-          path: 'busId',
-          select: 'busNumber currentStatus'
-        }
+        path: 'journey.pointId',
+        select: 'location name',
+        model: doc => mongoose.model(doc.journey.pointType)
       })
       .lean();
     if (!route) {
@@ -165,8 +124,8 @@ router.post('/', async (req, res) => {
     const route = req.body;
 
     // Required fields
-    const requiredFields = ['name', 'code', 'type', 'startStation', 'endStation', 'timing'];
-    const timingRequiredFields = ['frequency', 'firstTrip', 'lastTrip'];
+    const requiredFields = ['name', 'code', 'type', 'journey', 'timing'];
+    const journeyPointRequiredFields = ['pointId', 'pointType', 'sequence'];
 
     let errors = [];
 
@@ -176,11 +135,42 @@ router.post('/', async (req, res) => {
       errors.push(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
+    // Validate journey points
+    if (route.journey && Array.isArray(route.journey)) {
+      route.journey.forEach((point, index) => {
+        const missingPointFields = journeyPointRequiredFields.filter(field => !point[field]);
+        if (missingPointFields.length > 0) {
+          errors.push(`Journey point at index ${index} missing required fields: ${missingPointFields.join(', ')}`);
+        }
+        if (point.pointType && !['Station', 'Stop'].includes(point.pointType)) {
+          errors.push(`Journey point at index ${index} has invalid pointType. Must be "Station" or "Stop"`);
+        }
+      });
+    }
+
+    // Validate journey array
+    if (route.journey) {
+      if (!Array.isArray(route.journey)) {
+        errors.push('Journey must be an array');
+      } else if (route.journey.length < 2) {
+        errors.push('Journey must contain at least two points');
+      } else {
+        // Check each point in journey array
+        route.journey.forEach((point, index) => {
+          if (!point.pointId || !point.pointType || !point.sequence) {
+            errors.push(`Invalid point data at index ${index}`);
+          }
+          if (!['Station', 'Stop'].includes(point.pointType)) {
+            errors.push(`Invalid pointType at index ${index}`);
+          }
+        });
+      }
+    }
+
     // Check timing
     if (route.timing) {
-      const missingTimingFields = timingRequiredFields.filter(field => !route.timing[field]);
-      if (missingTimingFields.length > 0) {
-        errors.push(`Missing timing fields: ${missingTimingFields.join(', ')}`);
+      if (!route.timing['frequency']) {
+        errors.push(`Missing timing fields: frequency`);
       }
     } else if (route.timing === undefined) {
       errors.push('timing object is required');
@@ -210,10 +200,20 @@ router.post('/', async (req, res) => {
     }
     let createdRoute;
     try {
-      createdRoute = await Route.create(route);
-      const createTrips = await generateTripsForRoute(createdRoute._id, createdRoute.timing);
-      await Route.findByIdAndUpdate(createdRoute._id, { $push: { trips: { $each: createTrips } } });
-      createdRoute.trips = createTrips;
+      // Initialize fares array with zero base fares
+      const fares = new Array(route.journey.length).fill(0);
+
+      // Create route with generated trip times and initial fares
+      const routeData = {
+        ...route,
+        trips: tripTimes,
+        fares: [fares]  // Initial fare structure with zeros
+      };
+
+      createdRoute = await Route.create(routeData);
+
+      // Update route connectivity
+      await createdRoute.constructor.updateRouteConnectivity(createdRoute._id);
     } catch (insertError) {
       if (insertError.code === 11000) {
         // Duplicate key error
@@ -296,14 +296,33 @@ router.post('/bulk', async (req, res) => {
     // Validate each route and separate valid from invalid
     let validRoutes = [];
     const validationErrors = [];
-    const requiredFields = ['name', 'code', 'type', 'startStation', 'endStation', 'timing'];
+    const requiredFields = ['name', 'code', 'type', 'journey', 'timing'];
     const timingRequiredFields = ['frequency', 'firstTrip', 'lastTrip'];
+    const journeyPointRequiredFields = ['pointId', 'pointType', 'sequence',];
 
     routes.forEach((route, index) => {
       const errors = [];
 
       const missingFields = requiredFields.filter(field => !route[field]);
       if (missingFields.length > 0) errors.push(`Missing required fields: ${missingFields.join(', ')}`);
+
+      // Validate journey points
+      if (route.journey && Array.isArray(route.journey)) {
+        if (route.journey.length < 2) {
+          errors.push('Journey must have at least 2 points');
+        }
+        route.journey.forEach((point, pointIndex) => {
+          const missingPointFields = journeyPointRequiredFields.filter(field => !point[field]);
+          if (missingPointFields.length > 0) {
+            errors.push(`Journey point at index ${pointIndex} missing required fields: ${missingPointFields.join(', ')}`);
+          }
+          if (point.pointType && !['Station', 'Stop'].includes(point.pointType)) {
+            errors.push(`Journey point at index ${pointIndex} has invalid pointType. Must be "Station" or "Stop"`);
+          }
+        });
+      } else {
+        errors.push('Journey must be an array of points');
+      }
 
       if (route.timing) {
         const missingTimingFields = timingRequiredFields.filter(field => !route.timing[field]);
@@ -331,24 +350,8 @@ router.post('/bulk', async (req, res) => {
     // Insert valid routes
     if (validRoutes.length > 0) {
       try {
-        validRoutes = validRoutes.map(route => ({ _id: new mongoose.Types.ObjectId(), ...route }));
-        createdRoutes = await Route.insertMany(validRoutes, { ordered: false, lean: false, validateBeforeSave: true });
-
-        // Generate trips for each created route
-        const tripPromises = createdRoutes.map(async (routeDoc) => {
-          try {
-            const trips = await generateTripsForRoute(routeDoc._id, routeDoc.timing);
-            routeDoc.trips = trips;
-            await routeDoc.save(); // update the trips array in the route
-          } catch (err) {
-            console.error(`Failed to generate trips for route ${routeDoc.code}:`, err);
-          }
-        });
-
-        await Promise.all(tripPromises);
-
+        createdRoutes = await Route.insertMany(validRoutes, { ordered: false });
       } catch (insertError) {
-        console.error('Insert error:', insertError);
         if (insertError.name === 'BulkWriteError') {
           createdRoutes = insertError.result.insertedDocs || [];
           insertError.writeErrors.forEach(err => {
@@ -405,7 +408,9 @@ router.post('/bulk', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to process bulk route creation',
-      message: error.message
+      message: error.message,
+      details: error.stack,
+      feild: error.field || null
     });
   }
 });
@@ -593,10 +598,10 @@ router.post('/:routeCode/intermediate-points', async (req, res) => {
     // }
 
     const { routeCode } = req.params;
-    const { pointId, pointType, pointName, sequence, arrivalTime, departureTime, haltTime = 0, isOptional = false } = req.body;
+    const { pointId, pointType, sequence } = req.body;
 
     // Validate required fields
-    const requiredFields = ['pointId', 'pointType', 'pointName', 'sequence', 'arrivalTime', 'departureTime'];
+    const requiredFields = ['pointId', 'pointType', 'sequence'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
 
     if (missingFields.length > 0) {
@@ -608,10 +613,10 @@ router.post('/:routeCode/intermediate-points', async (req, res) => {
     }
 
     // Validate pointType
-    if (!['station', 'stop'].includes(pointType)) {
+    if (!['Station', 'Stop'].includes(pointType)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid pointType. Must be "station" or "stop"'
+        error: 'Invalid pointType. Must be "Station" or "Stop"'
       });
     }
 
@@ -624,10 +629,11 @@ router.post('/:routeCode/intermediate-points', async (req, res) => {
       });
     }
 
-    // Add intermediate point with connectivity
-    await route.addIntermediatePointWithConnectivity(
-      pointId, pointType, pointName, sequence, arrivalTime, departureTime, haltTime, isOptional
-    );
+    // Add intermediate point with journey array update
+    await route.addIntermediatePoint(pointId, pointType, sequence);
+
+    // Fetch updated route to get the new journey array
+    const updatedRoute = await Route.findById(route._id);
 
     res.status(201).json({
       success: true,
@@ -635,10 +641,7 @@ router.post('/:routeCode/intermediate-points', async (req, res) => {
       data: {
         routeId: route._id,
         routeCode: route.code,
-        pointId: pointId,
-        pointType: pointType,
-        pointName: pointName,
-        sequence: sequence
+        addedPoint: updatedRoute.journey.find(p => p.sequence === sequence)
       }
     });
   } catch (error) {
@@ -672,8 +675,8 @@ router.delete('/:routeCode/intermediate-points/:pointId', async (req, res) => {
       });
     }
 
-    // Remove intermediate point with connectivity
-    await route.removeIntermediatePointWithConnectivity(pointId);
+    // Remove intermediate point from journey array
+    await route.removeIntermediatePoint(pointId);
 
     res.json({
       success: true,
@@ -780,50 +783,107 @@ router.delete('/:routeCode', async (req, res) => {
   }
 });
 
-// POST - Update route connectivity manually (Admin only)
-router.post('/update-connectivitys', async (req, res) => {
-  try {
-    // Check if user is admin
-    // if (!req.user || !req.user.admin) {
-    //   return res.status(403).json({
-    //     success: false,
-    //     error: 'Access denied. Admin privileges required.'
-    //   });
-    // }
+async function updateRouteConnectivity(route) {
+  for (let i = 0; i < route.journey.length - 1; i++) {
+    // --- Fetch the two consecutive points ----------------------------------
+    const current  = route.journey[i];
+    const next     = route.journey[i + 1];
 
-    // Find route by code first to get the ID
-    const routes = await Route.find({ connectivityUpdated: false });
-    if (!routes) {
-      return res.status(201).json({
-        success: true,
-        message: 'All routes connectivity are up to date.'
-      })
-        ;
+    const first  = current.pointType === 'Station'
+      ? await Station.findById(current.pointId)
+      : await Stop.findById(current.pointId);
+
+    const second = next.pointType === 'Station'
+      ? await Station.findById(next.pointId)
+      : await Stop.findById(next.pointId);
+
+    if (!first || !second) throw new Error('Missing Station/Stop document');
+
+    // --- NOTE: location is { type, coordinates: [lng, lat] } ----------------
+    const loc1 = first.location.coordinates;
+    const loc2 = second.location.coordinates;
+
+    const walk = await axios.get(
+      `${OSRM_API}/route/v1/walking/${loc1[0]},${loc1[1]};${loc2[0]},${loc2[1]}?overview=false`
+    );
+
+    const distance = Math.round(walk.data.routes[0].distance);
+    const duration = Math.round(walk.data.routes[0].duration / 60); // minutes
+
+    // --- Add each as nearby stop to the other -------------------------------
+    if (!first.nearbyStops.some(x =>
+          x.routeId === route._id && x.pointId === next.pointId)) {
+      first.nearbyStops.push({
+        pointType: next.pointType,
+        pointId:   next.pointId,
+        routeId:   route._id,
+        distance,
+        walktime:  duration
+      });
     }
 
-    let failedRoutes = [];
+    if (!second.nearbyStops.some(x =>
+          x.routeId === route._id && x.pointId === current.pointId)) {
+      second.nearbyStops.push({
+        pointType: current.pointType,
+        pointId:   current.pointId,
+        routeId:   route._id,
+        distance,
+        walktime:  duration
+      });
+    }
 
+    // --- Make sure the routeId exists in their `routes` array ----------------
+    // --- Make sure the routeId and nearbyStops sequence should same, as we are using it in search algo for time optimization ------- 
+    if (!first.routes.some(r => r.routeId === route._id)) {
+      first.routes.push({ routeId: route._id, position: 'intermediate', sequence: 0 });
+    }
+    if (!second.routes.some(r => r.routeId === route._id)) {
+      second.routes.push({ routeId: route._id, position: 'intermediate', sequence: 0 });
+    }
+
+    await first.save();
+    await second.save();
+  }
+
+  // mark the route itself as updated
+  route.connectivityUpdated = true;
+  await route.save();
+}
+
+/**
+ * POST – Update connectivity for all routes whose connectivityUpdated = false
+ */
+router.post('/update-connectivitys', async (req, res) => {
+  try {
+    const routes = await Route.find({ connectivityUpdated: false });
+
+    if (!routes || routes.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'All routes connectivity are up to date.'
+      });
+    }
+
+    const failedRoutes = [];
     for (const route of routes) {
       try {
-        await Route.updateRouteConnectivity(route._id);
-      } catch (error) {
-        failedRoutes.push({ routeCode: route.code, error: error.message });
+        await updateRouteConnectivity(route);
+      } catch (err) {
+        failedRoutes.push({ routeCode: route.code, error: err.message });
       }
     }
 
-
-    // Update route connectivity
-
     res.json({
       success: true,
-      message: ` ${routes.length - failedRoutes.length} Routes connectivity updated successfully.`,
-      failedRoutes: failedRoutes
+      message: `${routes.length - failedRoutes.length} route(s) connectivity updated successfully.`,
+      failedRoutes
     });
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
       success: false,
       error: 'Failed to update route connectivity',
-      message: error.message
+      message: err.message
     });
   }
 });

@@ -2,7 +2,10 @@ const mongoose = require('mongoose');
 const mongooseLeanVirtuals = require('mongoose-lean-virtuals');
 
 const driverSchema = new mongoose.Schema({
-  _id: mongoose.Schema.Types.ObjectId,
+  _id: {
+    type: String,
+    required: true
+  },
   name: {
     type: String,
     required: true,
@@ -36,7 +39,7 @@ const driverSchema = new mongoose.Schema({
     default: true
   },
   assignedBus: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
     ref: 'Bus'
   },
   emergencyContact: {

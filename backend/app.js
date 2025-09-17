@@ -8,6 +8,13 @@ const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const {client} = require('./modules/redisClient')
+
+client.connect().then(() => {
+  console.log('Redis connected');
+}).catch(err => {
+  console.error('Redis connection error:', err);
+})
 
 // MongoDB Connection
 
