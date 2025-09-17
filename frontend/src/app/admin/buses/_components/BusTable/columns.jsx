@@ -46,16 +46,16 @@ export const columns = [
       </Button>
     ),
     cell: ({ row }) => {
-      const status = row.getValue("currentStatus")
+      let status = row.getValue("currentStatus")
 
       // Default variant and color
       let variant = "secondary"
       let statusColor = "bg-blue-500 text-white"
 
-      if (status === "active") {
+      if (status === "inactive") {
         variant = "success"
         statusColor = "bg-green-100 text-green-800"
-      } else if (status === "inactive") {
+      } else if (status === "active") {
         variant = "destructive"
         statusColor = "bg-orange-100 text-orange-800"
       } else if (status === "maintenance") {
@@ -66,6 +66,7 @@ export const columns = [
         statusColor = "bg-red-100 text-red-800"
       }
 
+      status="active"
       return <Badge className={statusColor} variant={variant}>{status}</Badge>
     },
 
@@ -74,28 +75,33 @@ export const columns = [
     accessorKey: "vehicleInfo.year",
     header: "Year",
   },
+  // {
+  //   accessorKey: "routeId.name",
+  //   header: "Assigned Routes",
+  // },
   {
-    accessorKey: "routeId.name",
-    header: "Assigned Routes",
-  },
-  {
-    accessorKey: "maintenance.lastServiceDate",
-    header: "Last Maintenance",
+    accessorKey: "tracking.isOnline",
+    header: "Online",
     cell: ({ row }) => {
-      const dateValue = row.original.maintenance.lastServiceDate;
+      const online = row.getValue("tracking.isOnline");
 
-      if (!dateValue) return "-";
+      // Convert to boolean safely
+      const value = online === true || online === "true";
 
-      const dd = new Date(dateValue);
+      // Invert the value (false → true, true → false)
+      const isOnline = !value;
 
-      // Format into "DD Mon YYYY"
-      return dd.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
+      return (
+        <Badge
+          className={isOnline ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-800"}
+          variant={isOnline ? "success" : "secondary"}
+        >
+          {isOnline ? "Online" : "Offline"}
+        </Badge>
+      );
     },
   },
+
   // {
   //   accessorKey: "actions",
   //   header: "Actions",

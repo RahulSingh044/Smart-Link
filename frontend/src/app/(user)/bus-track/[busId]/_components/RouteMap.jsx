@@ -4,7 +4,6 @@ import {
   MapContainer,
   TileLayer,
   Marker,
-  Popup,
   Polyline,
   useMap,
 } from "react-leaflet";
@@ -21,7 +20,7 @@ const FlyToBus = ({ busCoords }) => {
     if (busCoords) {
       const now = Date.now();
       if (now - lastMove.current > 5000) {
-        map.flyTo([busCoords.lat, busCoords.lng], 15, { duration: 1.2 });
+        map.flyTo([busCoords.lat, busCoords.lng], 16, { duration: 1.2 });
         lastMove.current = now;
       }
     }
@@ -45,6 +44,7 @@ const FitBounds = ({ stops }) => {
 const RouteMap = ({ stops, busNumber }) => {
   const [routeCoords, setRouteCoords] = useState([]);
   const [busCoords, setBusCoords] = useState(null);
+  const [eta, setEta] = useState(null);
 
   const busMarkerRef = useRef(null);
   const animationRef = useRef(null);
@@ -93,17 +93,19 @@ const RouteMap = ({ stops, busNumber }) => {
     fetchRoute();
   }, [stops]);
 
-  // Fetch bus coords
+  // Fetch bus coords + ETA
   useEffect(() => {
     if (!busNumber) return;
     let interval;
     const fetchBus = async () => {
       try {
         const res = await getBusDataById(busNumber);
+        console.log("Track Bus", res.data.eta.scheduled_arrival_time)
+        setEta(res.data.eta?.scheduled_arrival_time || null);
+        // console.log("ETA", res.data?.eta?.estimated_arrival_time );
         const data = res.data.location;
         if (data?.latitude && data?.longitude) {
-          prevCoords.current =
-            nextCoords.current || { lat: data.latitude, lng: data.longitude };
+          prevCoords.current = nextCoords.current || { lat: data.latitude, lng: data.longitude };
           nextCoords.current = { lat: data.latitude, lng: data.longitude };
           animStart.current = performance.now();
           animate();
@@ -114,7 +116,7 @@ const RouteMap = ({ stops, busNumber }) => {
     };
 
     fetchBus();
-    interval = setInterval(fetchBus, 3000); // refresh
+    interval = setInterval(fetchBus, 5000); // refresh every 5s
     return () => clearInterval(interval);
   }, [busNumber]);
 
@@ -145,47 +147,59 @@ const RouteMap = ({ stops, busNumber }) => {
   };
 
   return (
-    <div className="h-full w-full rounded-xl shadow-md relative">
-      <MapContainer
-        center={[stops[0].lat, stops[0].lng]}
-        zoom={12}
-        scrollWheelZoom={true}
-        className="h-64 w-full rounded-xl"
-      >
-        <FitBounds stops={stops} />
-        <FlyToBus busCoords={busCoords} />
+    <div className="relative h-full w-full flex flex-col">
+      {/* Map takes full height minus ETA panel */}
+      <div className="flex-1 h-full">
+        <MapContainer
+          center={[stops[0].lat, stops[0].lng]}
+          zoom={12}
+          scrollWheelZoom={true}
+          className="h-full w-full"
+        >
+          <FitBounds stops={stops} />
+          <FlyToBus busCoords={busCoords} />
 
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          detectRetina={true}
-          maxZoom={18}
-        />
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            detectRetina={true}
+            maxZoom={17}
+          />
 
-        {/* Stop markers */}
-        {stops.map((stop, idx) => (
-          <Marker key={idx} position={[stop.lat, stop.lng]}>
-            <Popup>{stop.name || `Stop ${idx + 1}`}</Popup>
-          </Marker>
-        ))}
+          {/* Stop markers */}
+          {stops.map((stop, idx) => (
+            <Marker key={idx} position={[stop.lat, stop.lng]} />
+          ))}
 
-        {/* Polyline route */}
-        {routeCoords.length > 0 && (
-          <Polyline positions={routeCoords} color="blue" weight={4} />
-        )}
+          {/* Polyline route */}
+          {routeCoords.length > 0 && (
+            <Polyline positions={routeCoords} color="blue" weight={4} />
+          )}
 
-        {/* Bus marker */}
-        {busCoords && (
-          <Marker
-            position={[busCoords.lat, busCoords.lng]}
-            icon={busIcon}
-            ref={busMarkerRef}
-          >
-            <Popup>Bus {busNumber}</Popup>
-          </Marker>
-        )}
-      </MapContainer>
+          {/* Bus marker */}
+          {busCoords && (
+            <Marker
+              position={[busCoords.lat, busCoords.lng]}
+              icon={busIcon}
+              ref={busMarkerRef}
+            />
+          )}
+
+
+        </MapContainer>
+
+        {/* ETA Panel - fixed height */}
+        <div className="h-16 bg-white shadow-lg rounded-t-2xl p-4 flex justify-between items-center">
+          <p className="text-gray-700 font-semibold">
+            Bus {busNumber} ETA:{" "}
+            <span className="text-blue-600">
+              {eta !== null ? `${eta}` : "Calculating..."}
+            </span>
+          </p>
+        </div>
+
+      </div>
     </div>
-  );
+  )
 };
 
 export default RouteMap;

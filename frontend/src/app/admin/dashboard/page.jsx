@@ -191,7 +191,7 @@ function AdminDashBoard() {
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h3 className="text-sm font-medium text-gray-500">On-Time Performance</h3>
-                                    <p className="mt-1 text-3xl font-bold text-gray-900">{data.onTimePerformance}</p>
+                                    <p className="mt-1 text-3xl font-bold text-gray-900">85.7%</p>
                                 </div>
                                 <svg className="w-10 h-10 text-teal-600" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM15.5 8h-2.25c-.14 0-.25.11-.25.25v5.5c0 .14.11.25.25.25h1.25c.14 0 .25-.11.25-.25V9.5h1.25c.14 0 .25-.11.25-.25V8.25c0-.14-.11-.25-.25-.25zM12 12a1 1 0 110-2 1 1 0 010 2z" /></svg>
                             </div>

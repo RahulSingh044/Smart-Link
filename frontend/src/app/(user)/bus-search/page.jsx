@@ -1,43 +1,37 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { mockBuses } from "../../../data/buses"
 import { ArrowUpDown, SlidersHorizontal } from "lucide-react"
 import BusCard from './_components/BusCard';
 import BusSearchSkeleton from './_components/BusSearchLoadingPageSkeleton';
+import { getRoute } from '@/hooks/useRoute';
 
 export default function BusSearchPage() {
-
   const searchParams = useSearchParams();
-  const [isLoading, setIsLoading] = useState(false);
-  const [buses, setBuses] = useState([]);
+  const [trip, setTrip] = useState([]);
+  const [routeName, setRouteName] = useState();
+  const [fare, setFare] = useState();
 
-  const fromLocation = searchParams.get('from') || '';
-  const toLocation = searchParams.get('to') || '';
+  const { route, loading, error } = getRoute('R003');
 
-  if (isLoading) {
+  useEffect(() => {
+    if (route?.trips) {
+      console.log("trips", route.trips)
+      setFare(route?.fare?.maxFare)
+      setRouteName(route?.name)
+      setTrip(route.trips);
+    }
+  }, [route]);
+
+  if (loading) {
     return <BusSearchSkeleton />
   }
-
-    useEffect(() => {
-    setTimeout(() => {
-      const filteredBuses = mockBuses.filter((bus) => {
-        const isMatchingFrom = bus.origin.toLowerCase() === fromLocation.toLowerCase();
-        const isMatchingTo = bus.destination.toLowerCase() === toLocation.toLowerCase();
-        return isMatchingFrom && isMatchingTo;
-      });
-      setBuses(filteredBuses);
-      setIsLoading(false);
-    }, 1500);
-  }, [fromLocation, toLocation]);
-
 
   return (
     <div className="bg-gray-100 min-h-screen p-4">
       <div className="max-w-md mx-auto">
-        {/* <SearchBar /> */}
         <div className="flex items-center justify-between mt-6 mb-4 text-sm text-gray-600">
-          <span>Found {buses.length} buses</span>
+          <span>Found {trip.length} buses</span>
           <div className="flex space-x-4">
             <button className="flex items-center space-x-1">
               <ArrowUpDown size={18} />
@@ -51,11 +45,8 @@ export default function BusSearchPage() {
         </div>
 
         <div className="space-y-4">
-          {buses.map((bus) => (
-            <BusCard
-              key={bus.id}
-              bus={bus}
-            />
+          {trip.map((bus) => (
+            <BusCard key={bus.busId.busNumber} bus={bus} routeName={routeName} fare={fare} />
           ))}
         </div>
       </div>

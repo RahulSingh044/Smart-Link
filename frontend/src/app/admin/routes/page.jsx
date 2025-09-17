@@ -10,6 +10,7 @@ import { columns } from './_components/RouteTable/columns'
 import AddRouteDialogueBox from './_components/AddRouteDialogueBox'
 import { Plus } from 'lucide-react'
 import { useHydrated } from '../../hooks/useHydrated'
+import RoutesLoadingSkeleton from './_components/RoutesLoadingSkeleton'
 
 function page() {
     const [user] = useAuthState(auth);
@@ -71,11 +72,7 @@ function page() {
 
     // ----------------Loading Screen---------------------
     if (loading) {
-        return (
-            <div className="w-screen h-screen flex justify-center items-center text-2xl font-semibold">
-                loading...
-            </div>
-        )
+        return <RoutesLoadingSkeleton />
     }
 
     return (
@@ -95,18 +92,18 @@ function page() {
                         <span>Add Route</span>
                     </button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                     <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300">
                         <h2 className="text-xl font-semibold text-gray-700">Total Routes</h2>
                         <p className="text-4xl font-bold text-blue-600 mt-2">{routes.length}</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300">
                         <h2 className="text-xl font-semibold text-gray-700">Active Routes</h2>
-                        <p className="text-4xl font-bold text-green-600 mt-2">{activeRoutes}</p>
+                        <p className="text-4xl font-bold text-green-600 mt-2">30</p>
                     </div>
                     <div className="bg-white p-6 rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300">
                         <h2 className="text-xl font-semibold text-gray-700">InActive Routes</h2>
-                        <p className="text-4xl font-bold text-green-600 mt-2">{routes.length - activeRoutes}</p>
+                        <p className="text-4xl font-bold text-red-600 mt-2">0</p>
                     </div>
                 </div>
                 <div className='border-2 rounded-lg px-2 w-full '>

@@ -17,14 +17,31 @@ export const columns = [
     accessorKey: "fullAddress",
     header: "Address",
   },
-  {
-    accessorKey: "analytics.dailyPassengerCount",
-    header: "Capacity",
-  },
-  {
-    accessorKey: "analytics.averageWaitTime",
-    header: "Wait-time",
-  },
+// {
+//   accessorKey: "operatingHours.friday",
+//   header: "Schedule",
+//   cell: ({ row }) => {
+//     const friday = row.getValue("operatingHours.monday");
+
+//     if (!friday || typeof friday !== "object") return "No schedule";
+
+//     const { open, close, is24Hours } = friday;
+
+//     if (is24Hours) {
+//       return <span>24 Hours</span>;
+//     }
+
+//     return (
+//       <span>
+//         {open && close ? `${open} - ${close}` : "No schedule"}
+//       </span>
+//     );
+//   },
+// },
+//   {
+//     accessorKey: "analytics.averageWaitTime",
+//     header: "Wait-time",
+//   },
   {
     accessorKey: "status",
     header: ({ column }) => (
