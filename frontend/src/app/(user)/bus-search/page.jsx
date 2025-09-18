@@ -9,17 +9,12 @@ import { getRoute } from '@/hooks/useRoute';
 export default function BusSearchPage() {
   const searchParams = useSearchParams();
   const [trip, setTrip] = useState([]);
-  const [routeName, setRouteName] = useState();
-  const [fare, setFare] = useState();
 
-  const { route, loading, error } = getRoute('R003');
+  const { route, loading, error } = getRoute(searchParams.get("origin"), searchParams.get("dest"), searchParams.get("time"));
 
   useEffect(() => {
-    if (route?.trips) {
-      console.log("trips", route.trips)
-      setFare(route?.fare?.maxFare)
-      setRouteName(route?.name)
-      setTrip(route.trips);
+    if (route) {
+      setTrip(route);
     }
   }, [route]);
 
@@ -31,7 +26,7 @@ export default function BusSearchPage() {
     <div className="bg-gray-100 min-h-screen p-4">
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mt-6 mb-4 text-sm text-gray-600">
-          <span>Found {trip.length} buses</span>
+          <span>Found 1 buses</span>
           <div className="flex space-x-4">
             <button className="flex items-center space-x-1">
               <ArrowUpDown size={18} />
@@ -45,8 +40,8 @@ export default function BusSearchPage() {
         </div>
 
         <div className="space-y-4">
-          {trip.map((bus) => (
-            <BusCard key={bus.busId.busNumber} bus={bus} routeName={routeName} fare={fare} />
+          {trip.map((t, i) => (
+            <BusCard key={i} trip={t} />
           ))}
         </div>
       </div>

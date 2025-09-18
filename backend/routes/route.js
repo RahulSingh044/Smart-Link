@@ -786,10 +786,10 @@ router.delete('/:routeCode', async (req, res) => {
 async function updateRouteConnectivity(route) {
   for (let i = 0; i < route.journey.length - 1; i++) {
     // --- Fetch the two consecutive points ----------------------------------
-    const current  = route.journey[i];
-    const next     = route.journey[i + 1];
+    const current = route.journey[i];
+    const next = route.journey[i + 1];
 
-    const first  = current.pointType === 'Station'
+    const first = current.pointType === 'Station'
       ? await Station.findById(current.pointId)
       : await Stop.findById(current.pointId);
 
@@ -812,38 +812,34 @@ async function updateRouteConnectivity(route) {
 
     // --- Add each as nearby stop to the other -------------------------------
     if (!first.nearbyStops.some(x =>
-          x.routeId === route._id && x.pointId === next.pointId)) {
+      x.routeId === route._id && x.pointId === next.pointId)) {
       first.nearbyStops.push({
         pointType: next.pointType,
-        pointId:   next.pointId,
-        routeId:   route._id,
+        pointId: next.pointId,
+        routeId: route._id,
         distance,
-        walktime:  duration
-      });
-    }
-
-    if (!second.nearbyStops.some(x =>
-          x.routeId === route._id && x.pointId === current.pointId)) {
-      second.nearbyStops.push({
-        pointType: current.pointType,
-        pointId:   current.pointId,
-        routeId:   route._id,
-        distance,
-        walktime:  duration
+        walktime: duration
       });
     }
 
     // --- Make sure the routeId exists in their `routes` array ----------------
     // --- Make sure the routeId and nearbyStops sequence should same, as we are using it in search algo for time optimization ------- 
     if (!first.routes.some(r => r.routeId === route._id)) {
-      first.routes.push({ routeId: route._id, position: 'intermediate', sequence: 0 });
-    }
-    if (!second.routes.some(r => r.routeId === route._id)) {
-      second.routes.push({ routeId: route._id, position: 'intermediate', sequence: 0 });
+      if (i == 0) first.routes.push({ routeId: route._id, position: 'start', sequence: i + 1 });
+      else first.routes.push({ routeId: route._id, position: 'intermediate', sequence: i + 1 });
     }
 
     await first.save();
-    await second.save();
+  }
+
+  const last = route.journey[route.journey.length - 1];
+
+  const node = last.pointType === 'Station'
+    ? await Station.findById(last.pointId)
+    : await Stop.findById(last.pointId);
+
+  if (!node.routes.some(r => r.routeId === route._id)) {
+    node.routes.push({ routeId: route._id, position: 'end', sequence: route.journey.length });
   }
 
   // mark the route itself as updated

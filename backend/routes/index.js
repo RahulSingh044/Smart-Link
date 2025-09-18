@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {findNearerPoints} = require('../modules/nearerPoints');
 const {loadGraph} = require('../modules/loadGraph.js');
-const findEarliestPath = require('../modules/searchRoute.js');
+const findAllTrips = require('../modules/searchRoute.js');
 const cron = require("node-cron");
 
 const Route = require("../models/route");
@@ -43,8 +43,7 @@ router.get('/search-route', async (req, res) => {
   }
   try {
     const t = time ? new Date(time) : new Date();
-    const route = await findEarliestPath(origin, destination, t.getTime());
-    console.log(route); 
+    const route = await findAllTrips(origin, destination, t.getTime());
     res.status(200).json({ success: true, data: route });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -75,7 +74,7 @@ function getTimeDifferenceInMinutes(time1, time2) {
 
 // Generate trips for all active routes for today
 async function generateTripsForToday() {
-  const routes = await Route.find({ status: "active" }).populate("journey.pointId").exec();
+  const routes = await Route.find({ status: "active" }).populate("journey.pointId", "name code nearbyStops location").populate("buses.busId");
 
   for (const route of routes) {
     if (!route.schedule) continue;
@@ -97,11 +96,12 @@ async function generateTripsForToday() {
 
       
       const trip = new Trip({
+        busId: route.buses[i].busId,
         routeId: route._id,
         journey,
       });
 
-      if(i == 0) await loadGraph(trip, route);
+      await loadGraph(trip, route, i);
       
       await trip.save();
     }
@@ -109,7 +109,7 @@ async function generateTripsForToday() {
 }
 
 // Schedule cron job to run daily at 00:00
-cron.schedule("16 14 * * *", async () => {
+cron.schedule("04 02 * * *", async () => {
   try {
     await generateTripsForToday();
   } catch (err) {

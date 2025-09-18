@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const axios = require('axios');
 require('dotenv').config();
 
 // Define the route schema
@@ -61,6 +60,14 @@ const routeSchema = new mongoose.Schema({
   }],
 
   schedule: [[String]],
+
+  buses: [{
+    busId: {
+      type: String,
+      required: true,
+      ref: 'Bus'
+    }
+  }],
 
   // Route timing and frequency
   timing: {

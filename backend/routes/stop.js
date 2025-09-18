@@ -228,7 +228,8 @@ router.post('/bulk', async (req, res) => {
     // Insert valid stops if any exist
     if (validStops.length > 0) {
       try {
-        createdStops = await Stop.insertMany(validStops, { ordered: false });
+        createdStops = await Stop.insertMany(validStops, { ordered: false, rawResult: true });
+        console.log(createdStops)
       } catch (insertError) {
         if (insertError.name === 'BulkWriteError') {
           // Handle partial success in bulk insert

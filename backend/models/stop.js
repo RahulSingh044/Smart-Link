@@ -15,6 +15,13 @@ const stopSchema = new mongoose.Schema({
     maxlength: 100
   },
 
+  code: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 10
+  },
+
   // Location information
   location: {
     type: {
