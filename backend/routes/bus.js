@@ -423,14 +423,8 @@ router.post('/bulk', async (req, res) => {
       }
     }
 
-    // Assign new ObjectIds to each bus before insert
-    const busesWithIds = buses.map(bus => ({
-      _id: new mongoose.Types.ObjectId(bus._id), // Preserve provided _id if any
-      ...bus
-    }));
-
     // Insert all buses at once
-    const createdBuses = await Bus.insertMany(busesWithIds, { ordered: true });
+    const createdBuses = await Bus.insertMany(buses, { ordered: true });
 
 
     res.status(201).json({

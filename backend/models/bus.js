@@ -1,9 +1,13 @@
 const mongoose = require('mongoose');
 const Driver = require("./driver");
+const { route } = require('../routes');
 
 // Define the bus schema
 const busSchema = new mongoose.Schema({
-  _id: mongoose.Schema.Types.ObjectId,
+  _id: {
+    type: String,
+    required: true
+  },
   // Basic bus information
   busNumber: {
     type: String,
@@ -22,16 +26,16 @@ const busSchema = new mongoose.Schema({
   },
 
   // Current active trip
-  currentTrip: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Trip',
+  currentRoute: {
+    type: String,
+    ref: 'Route',
     default: null
   },
 
   // Day's schedule of trips
   daySchedule: [{
     tripId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: 'Trip',
       required: true
     },
@@ -85,10 +89,10 @@ const busSchema = new mongoose.Schema({
     default: 'inactive'
   },
 
-  eta: {
-    type: Object,
-    default: null
-  },
+  // eta: {
+  //   type: Object,
+  //   default: null
+  // },
 
   // Real-time location data
   location: {
@@ -126,7 +130,7 @@ const busSchema = new mongoose.Schema({
 
   // Driver information
   driverId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
     ref: 'Driver'
   },
 
@@ -266,8 +270,6 @@ busSchema.pre("insertMany", async function (next, docs) {
   try {
 
     for (let doc of docs) {
-      // Ensure _id exists before insert
-      if (!doc._id) doc._id = new mongoose.Types.ObjectId();
 
       // Update lastSeen when location is present
       if (doc.location && (doc.location.latitude || doc.location.longitude)) {

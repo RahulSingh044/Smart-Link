@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Stop = require('../models/stop');
 const { verifyUser } = require('../middleware/authMiddleware');
+const mongoose = require('mongoose');
 
 // GET - Get all stops (paginated, Admin only)
 router.get('/', async (req, res) => {
@@ -26,7 +27,7 @@ router.get('/', async (req, res) => {
     const stops = await Stop.find()
       .skip(skip)
       .limit(limit)
-      .lean({virtuals: true});
+      .lean({ virtuals: true });
 
     res.json({
       success: true,
@@ -50,7 +51,7 @@ router.get('/', async (req, res) => {
 // POST - Add a single stop (Admin only)
 router.post('/', async (req, res) => {
   try {
-    
+
     // // Check if user is admin
     // if (!req.user || !req.user.admin) {
     //   return res.status(403).json({
@@ -60,11 +61,11 @@ router.post('/', async (req, res) => {
     // }
 
     const stopData = req.body;
-    
+
     // Validate required fields
-    const requiredFields = ['name', 'code', 'location'];
+    const requiredFields = ['name', 'coordinates'];
     const missingFields = requiredFields.filter(field => !stopData[field]);
-    
+
     if (missingFields.length > 0) {
       return res.status(400).json({
         success: false,
@@ -73,33 +74,32 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Validate location
-    const locationRequiredFields = ['latitude', 'longitude', 'address'];
-    const missingLocationFields = locationRequiredFields.filter(field => !stopData.location[field]);
-    
-    if (missingLocationFields.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required location information',
-        missingFields: missingLocationFields
-      });
+    // Validate coordinates if present
+    if (stopData.coordinates) {
+      if (typeof stopData.coordinates[0] !== 'number' ||
+        typeof stopData.coordinates[1] !== 'number') {
+        errors.push('Coordinates must contain numeric latitude and longitude');
+      } else {
+        // Validate coordinate ranges
+        if (stopData.coordinates[1] < -90 || stopData.coordinates[1] > 90) {
+          errors.push('Latitude must be between -90 and 90');
+        }
+        if (stopData.coordinates[0] < -180 || stopData.coordinates[0] > 180) {
+          errors.push('Longitude must be between -180 and 180');
+        }
+      }
     }
 
-    // Validate address
-    const addressRequiredFields = ['street', 'city', 'state'];
-    const missingAddressFields = addressRequiredFields.filter(field => !stopData.location.address[field]);
-    
-    if (missingAddressFields.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required address information',
-        missingFields: missingAddressFields
-      });
-    }
+    // Convert coordinates to location format
+    stopData.location = {
+      type: 'Point',
+      coordinates: stopData.coordinates
+    };
+    delete stopData.coordinates;
 
     const stop = new Stop(stopData);
     const savedStop = await stop.save();
-    
+
     res.status(201).json({
       success: true,
       message: 'Stop created successfully'
@@ -117,7 +117,7 @@ router.post('/', async (req, res) => {
         errorCode: 11000
       });
     }
-    
+
     if (error.name === 'ValidationError') {
       // Mongoose validation error
       const validationErrors = Object.values(error.errors).map(err => ({
@@ -125,7 +125,7 @@ router.post('/', async (req, res) => {
         message: err.message,
         value: err.value
       }));
-      
+
       return res.status(400).json({
         success: false,
         error: 'Validation error',
@@ -134,7 +134,7 @@ router.post('/', async (req, res) => {
         validationErrors: validationErrors
       });
     }
-    
+
     res.status(500).json({
       success: false,
       error: 'Failed to create stop',
@@ -157,7 +157,7 @@ router.post('/bulk', async (req, res) => {
     // }
 
     const { stops } = req.body;
-    
+
     if (!Array.isArray(stops) || stops.length === 0) {
       return res.status(400).json({
         success: false,
@@ -165,7 +165,7 @@ router.post('/bulk', async (req, res) => {
       });
     }
 
-    if (stops.length > 100) {
+    if (stops.length > 1000) {
       return res.status(400).json({
         success: false,
         error: 'Cannot create more than 100 stops at once'
@@ -175,61 +175,50 @@ router.post('/bulk', async (req, res) => {
     // Validate each stop and separate valid from invalid
     const validStops = [];
     const validationErrors = [];
-    const requiredFields = ['name', 'code', 'location'];
-    const locationRequiredFields = ['latitude', 'longitude', 'address'];
-    const addressRequiredFields = ['street', 'city', 'state'];
+    const requiredFields = ['name', 'coordinates'];
 
     stops.forEach((stop, index) => {
       const errors = [];
-      
+
       // Check required fields
       const missingFields = requiredFields.filter(field => !stop[field]);
       if (missingFields.length > 0) {
         errors.push(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
-      // Check location
-      if (stop.location) {
-        const missingLocationFields = locationRequiredFields.filter(field => !stop.location[field]);
-        if (missingLocationFields.length > 0) {
-          errors.push(`Missing location fields: ${missingLocationFields.join(', ')}`);
-        }
-      } else if (stop.location === undefined) {
-        errors.push('location object is required');
-      }
-
-      // Check address
-      if (stop.location && stop.location.address) {
-        const missingAddressFields = addressRequiredFields.filter(field => !stop.location.address[field]);
-        if (missingAddressFields.length > 0) {
-          errors.push(`Missing address fields: ${missingAddressFields.join(', ')}`);
-        }
-      } else if (stop.location && stop.location.address === undefined) {
-        errors.push('address object is required');
-      }
-
-      // Additional validation for data types and ranges
-      if (stop.location && stop.location.latitude) {
-        if (stop.location.latitude < -90 || stop.location.latitude > 90) {
-          errors.push('Latitude must be between -90 and 90');
-        }
-      }
-
-      if (stop.location && stop.location.longitude) {
-        if (stop.location.longitude < -180 || stop.location.longitude > 180) {
-          errors.push('Longitude must be between -180 and 180');
+      // Validate coordinates if present
+      if (stop.coordinates) {
+        if (typeof stop.coordinates[0] !== 'number' ||
+          typeof stop.coordinates[1] !== 'number') {
+          errors.push('Coordinates must contain numeric latitude and longitude');
+        } else {
+          // Validate coordinate ranges
+          if (stop.coordinates[1] < -90 || stop.coordinates[1] > 90) {
+            errors.push('Latitude must be between -90 and 90');
+          }
+          if (stop.coordinates[0] < -180 || stop.coordinates[0] > 180) {
+            errors.push('Longitude must be between -180 and 180');
+          }
         }
       }
 
       if (errors.length > 0) {
         validationErrors.push({
           index: index,
-          stopCode: stop.code || 'Unknown',
+          stop: stop.name || 'Unknown',
           errors: errors,
           stopData: stop // Include the problematic stop data for debugging
         });
       } else {
-        validStops.push(stop);
+        // Convert string IDs to ObjectId for _id and routeId fields
+        const stopToInsert = {
+          ...stop,     // preserve _id
+          location: {
+            type: 'Point',
+            coordinates: stop.coordinates                   // rename if your JSON uses `coordinates`
+          }
+        };
+        validStops.push(stopToInsert);
       }
     });
 
@@ -244,18 +233,18 @@ router.post('/bulk', async (req, res) => {
         if (insertError.name === 'BulkWriteError') {
           // Handle partial success in bulk insert
           createdStops = insertError.result.insertedDocs || [];
-          
+
           // Process write errors
           insertError.writeErrors.forEach(err => {
             const errorType = err.code === 11000 ? 'duplicate' : 'database';
             const field = err.code === 11000 ? Object.keys(err.keyPattern)[0] : null;
-            
+
             insertErrors.push({
-              stopCode: err.op.code || 'Unknown',
+              stop: err.op.name || 'Unknown',
               errorType: errorType,
               field: field,
-              message: err.code === 11000 
-                ? `${field} already exists` 
+              message: err.code === 11000
+                ? `${field} already exists`
                 : err.errmsg,
               errorCode: err.code,
               stopData: err.op
@@ -264,7 +253,7 @@ router.post('/bulk', async (req, res) => {
         } else {
           // Handle other database errors
           insertErrors.push({
-            stopCode: 'Multiple',
+            stop: 'Multiple',
             errorType: 'database',
             field: null,
             message: insertError.message,

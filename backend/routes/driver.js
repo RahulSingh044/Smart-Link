@@ -4,6 +4,7 @@ const Driver = require('../models/driver');
 const Bus = require('../models/bus');
 const { verifyUser } = require('../middleware/authMiddleware');
 const { body, validationResult } = require('express-validator');
+const mongoose = require('mongoose');
 
 // Validation middleware for driver creation/update
 const validateDriver = [
@@ -254,7 +255,7 @@ router.post('/', validateDriver, async (req, res) => {
     }
 
     const {
-      _id,
+      id,
       name,
       licenseNumber,
       phone,

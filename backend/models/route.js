@@ -1,10 +1,13 @@
 const mongoose = require('mongoose');
-const Station = require('./station');
-const Stop = require('./stop');
-const Trip = require('./trip');
+const axios = require('axios');
+require('dotenv').config();
 
 // Define the route schema
 const routeSchema = new mongoose.Schema({
+  _id: {
+    type: String,
+    required: true
+  },
   // Basic route information
   name: {
     type: String,
@@ -38,25 +41,12 @@ const routeSchema = new mongoose.Schema({
     default: 'local'
   },
 
-  // Start and end stations
-  startStation: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Station',
-    required: true
-  },
-
-  endStation: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Station',
-    required: true
-  },
-
-  // Intermediate stations and stops
-  stops: [{
+  // Journey array containing all points (stations and stops) in sequence
+  journey: [{
     pointId: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       required: true,
-      refPath: "stops.pointType"
+      refPath: 'journey.pointType'
     },
     pointType: {
       type: String,
@@ -70,11 +60,7 @@ const routeSchema = new mongoose.Schema({
     }
   }],
 
-  // List of trips assigned to this route
-  trips: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Trip'
-  }],
+  schedule: [[String]],
 
   // Route timing and frequency
   timing: {
@@ -127,36 +113,27 @@ const routeSchema = new mongoose.Schema({
     default: false
   },
 
-  // Fare information
-  fare: {
-    baseFare: {
-      type: Number,
+  // Fare information for each point in journey array
+  fares: [[{
+    type: Number,
+    required: true,
+    min: 0
+  }]],
+
+  // Fare concessions
+  concessions: [{
+    type: {
+      type: String,
+      enum: ['student', 'senior', 'disabled', 'monthly_pass'],
+      required: true
+    },
+    discount: {
+      type: Number, // percentage
       required: true,
-      min: 0
-    },
-    farePerKm: {
-      type: Number,
-      default: 0,
-      min: 0
-    },
-    maxFare: {
-      type: Number,
-      min: 0
-    },
-    concessions: [{
-      type: {
-        type: String,
-        enum: ['student', 'senior', 'disabled', 'monthly_pass'],
-        required: true
-      },
-      discount: {
-        type: Number, // percentage
-        required: true,
-        min: 0,
-        max: 100
-      }
-    }]
-  },
+      min: 0,
+      max: 100
+    }
+  }],
 
   // Route analytics and performance
   analytics: {
@@ -191,7 +168,7 @@ const routeSchema = new mongoose.Schema({
 
 // Virtual for total stops count
 +routeSchema.virtual('totalStops').get(function () {
-  return this.stops.length + 2; // +2 for start and end stations
+  return this.journey.length + 2; // +2 for start and end stations
 });
 
 // Virtual for checking if route is currently operating
@@ -206,7 +183,7 @@ routeSchema.virtual('isOperating').get(function () {
 
 // Pre-save middleware to calculate total duration if not provided
 routeSchema.pre('save', function (next) {
-  if (!this.timing.totalDuration && this.stops.length > 0) {
+  if (!this.timing.totalDuration && this.journey.length > 0) {
     // Calculate duration based on first and last trip times
     const firstTime = parseInt(this.timing.firstTrip.split(':')[0]) * 60 + parseInt(this.timing.firstTrip.split(':')[1]);
     const lastTime = parseInt(this.timing.lastTrip.split(':')[0]) * 60 + parseInt(this.timing.lastTrip.split(':')[1]);
@@ -217,7 +194,7 @@ routeSchema.pre('save', function (next) {
 
 routeSchema.pre("insertMany", function (next, docs) {
   for (const doc of docs) {
-    if (!doc.timing.totalDuration && doc.stops.length > 0) {
+    if (!doc.timing.totalDuration && doc.journey.length > 0) {
       const firstTime =
         parseInt(doc.timing.firstTrip.split(":")[0]) * 60 +
         parseInt(doc.timing.firstTrip.split(":")[1]);
@@ -249,7 +226,7 @@ routeSchema.statics.findByStation = function (stationId) {
     $or: [
       { startStation: stationId },
       { endStation: stationId },
-      { 'stops.pointId': stationId, 'stops.pointType': 'Station' }
+      { 'journey.pointId': stationId, 'journey.pointType': 'Station' }
     ],
     status: 'active'
   });
@@ -283,243 +260,54 @@ routeSchema.methods.removePeakHour = function (start, end, days) {
   return this.save();
 };
 
-// Method to update station connectivity when adding route
-routeSchema.statics.updateStationConnectivity = async function (stationId, routeId, position, sequence) {
-  const Station = require('./station');
 
-  try {
-    const station = await Station.findById(stationId);
-    if (!station) {
-      throw new Error(`Station with ID ${stationId} not found`);
-    }
-
-    // Add route to station if not already present
-    const existingRoute = station.routes.find(route =>
-      route.routeId.toString() === routeId.toString()
-    );
-
-    if (!existingRoute) {
-      station.routes.push({
-        routeId: routeId,
-        position: position,
-        sequence: sequence
-      });
-      await station.save();
-    }
-
-    return station;
-  } catch (error) {
-    throw new Error(`Failed to update station connectivity: ${error.message}`);
+// Method to update fares array
+routeSchema.methods.updateFares = async function (newFares) {
+  if (newFares.length !== this.journey.length) {
+    throw new Error('Number of fares must match number of journey points');
   }
+
+  this.fares = newFares;
+  return this.save();
 };
 
-// Method to update stop connectivity when adding route
-routeSchema.statics.updateStopConnectivity = async function (stopId, routeId, position, sequence) {
-  const Stop = require('./stop');
+// Method to find nearest points on route
+routeSchema.statics.findNearestPoints = async function (lat, lon, maxDistance = 1000) {
+  // Convert maxDistance from meters to degrees (approximate)
+  const maxDistanceDegrees = maxDistance / 111000;
 
-  try {
-    const stop = await Stop.findById(stopId);
-    if (!stop) {
-      throw new Error(`Stop with ID ${stopId} not found`);
-    }
-
-    // Add route to stop if not already present
-    const existingRoute = stop.routes.find(route =>
-      route.routeId.toString() === routeId.toString()
-    );
-
-    if (!existingRoute) {
-      stop.routes.push({
-        routeId: routeId,
-        position: position,
-        sequence: sequence
-      });
-      await stop.save();
-    }
-
-    return stop;
-  } catch (error) {
-    throw new Error(`Failed to update stop connectivity: ${error.message}`);
-  }
-};
-
-// Method to update connectivity between all points in a route
-routeSchema.statics.updateRouteConnectivity = async function (routeId) {
-  try {
-    const route = await this.findById(routeId).populate('startStation.stationId endStation.stationId').lean({ virtuals: true });
-    if (!route) {
-      throw new Error(`Route with ID ${routeId} not found`);
-    }
-
-    // Get all points in the route in sequence
-    const allPoints = [
-      { id: route.startStation, type: 'Station' },
-      ...route.stops.map(point => ({
-        id: point.pointId,
-        type: point.pointType
-      })),
-      { id: route.endStation, type: 'Station' }
-    ];
-
-    // Update connectivity between consecutive points
-    for (let i = 0; i < allPoints.length - 1; i++) {
-      const currentPoint = allPoints[i];
-      const nextPoint = allPoints[i + 1];
-
-      await this.updatePointConnectivity(
-        currentPoint.id,
-        currentPoint.type,
-        nextPoint.id,
-        nextPoint.type
-      );
-
-      // Update connectivity for next point (bidirectional)
-      await this.updatePointConnectivity(
-        nextPoint.id,
-        nextPoint.type,
-        currentPoint.id,
-        currentPoint.type
-      );
-    }
-
-    route.connectivityUpdated = true;
-    await route.save();
-
-  } catch (error) {
-    throw new Error(`Failed to update route connectivity: ${error.message}`);
-  }
-};
-
-// Helper method to update connectivity between two points
-routeSchema.statics.updatePointConnectivity = async function (pointId, pointType, connectedPointId, connectedPointType) {
-  try {
-    if (pointType === 'Station') {
-      const station = await Station.findById(pointId);
-      if (station) {
-        if (connectedPointType === 'Station') {
-          // Check if connection already exists
-          station.nearbyStops = station.nearbyStops || [];
-          const existingConnection = station.nearbyStops.find(
-            conn => conn.stopId.toString() === connectedPointId.toString()
-          );
-
-          if (!existingConnection) {
-            station.nearbyStops.push({
-              stopId: connectedPointId,
-              pointType: connectedPointType
-            });
-          }
-        } else {
-          // Connected to a stop
-          station.nearbyStops = station.nearbyStops || [];
-          const existingConnection = station.nearbyStops.find(
-            conn => conn.stopId.toString() === connectedPointId.toString()
-          );
-
-          if (!existingConnection) {
-            station.nearbyStops.push({
-              stopId: connectedPointId,
-              pointType: connectedPointType
-            });
-          }
-        }
-        await station.save();
-      }
-    } else {
-      const stop = await Stop.findById(pointId);
-      if (stop) {
-        if (connectedPointType === 'Station') {
-          // Check if connection already exists
-          // Ensure the array exists
-          stop.nearbyStops = stop.nearbyStops || [];
-          const existingConnection = stop.nearbyStops.find(
-            conn => conn.stopId.toString() === connectedPointId.toString()
-          );
-
-          if (!existingConnection) {
-            stop.nearbyStops.push({
-              stopId: connectedPointId,
-              pointType: connectedPointType
-            });
-          }
-        } else {
-          // Connected to another stop
-          stop.nearbyStops = stop.nearbyStops || [];
-          const existingConnection = stop.nearbyStops.find(
-            conn => conn.stopId.toString() === connectedPointId.toString()
-          );
-
-          if (!existingConnection) {
-            stop.nearbyStops.push({
-              stopId: connectedPointId,
-              pointType: connectedPointType
-            });
-          }
-        }
-        await stop.save();
+  const routes = await this.find({
+    'journey.pointId': {
+      $geoNear: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [lon, lat]
+        },
+        $maxDistance: maxDistance
       }
     }
-  } catch (error) {
-    console.error(`Failed to update connectivity for ${pointType} ${pointId}:`, error.message);
-  }
-};
+  }).populate('journey.pointId');
 
-// Enhanced method to add intermediate point with connectivity updates
-routeSchema.methods.addIntermediatePointWithConnectivity = async function (pointId, pointType, pointName, sequence, arrivalTime, departureTime, haltTime = 0, isOptional = false) {
-  try {
-    // Add the intermediate point
-    await this.addIntermediatePoint(pointId, pointType, pointName, sequence, arrivalTime, departureTime, haltTime, isOptional);
-
-    // Update connectivity for the new point
-    if (pointType === 'station') {
-      await this.constructor.updateStationConnectivity(pointId, this._id, 'intermediate', sequence);
-    } else if (pointType === 'stop') {
-      await this.constructor.updateStopConnectivity(pointId, this._id, 'intermediate', sequence);
-    }
-
-    // Update route connectivity to include the new point
-    await this.constructor.updateRouteConnectivity(this._id);
-
-    return this;
-  } catch (error) {
-    throw new Error(`Failed to add intermediate point with connectivity: ${error.message}`);
-  }
-};
-
-// Method to remove intermediate point and update connectivity
-routeSchema.methods.removeIntermediatePointWithConnectivity = async function (pointId) {
-  try {
-    const point = this.stops.find(p => p.pointId.toString() === pointId.toString());
-    if (!point) {
-      throw new Error('Point not found in route');
-    }
-
-    // Remove the point from route
-    await this.removeIntermediatePoint(pointId);
-
-    // Update connectivity by recalculating the entire route
-    await this.constructor.updateRouteConnectivity(this._id);
-
-    return this;
-  } catch (error) {
-    throw new Error(`Failed to remove intermediate point with connectivity: ${error.message}`);
-  }
-};
-
-// Method to update route and refresh all connectivity
-routeSchema.methods.updateRouteWithConnectivity = async function (updateData) {
-  try {
-    // Update the route
-    Object.assign(this, updateData);
-    await this.save();
-
-    // Refresh all connectivity
-    await this.constructor.updateRouteConnectivity(this._id);
-
-    return this;
-  } catch (error) {
-    throw new Error(`Failed to update route with connectivity: ${error.message}`);
-  }
+  return routes.map(route => ({
+    routeId: route._id,
+    nearestPoints: route.journey
+      .filter(point => {
+        const pointLat = point.pointId.location.latitude;
+        const pointLon = point.pointId.location.longitude;
+        const distance = Math.sqrt(
+          Math.pow(lat - pointLat, 2) +
+          Math.pow(lon - pointLon, 2)
+        );
+        return distance <= maxDistanceDegrees;
+      })
+      .map(point => ({
+        pointId: point.pointId._id,
+        pointType: point.pointType,
+        sequence: point.sequence,
+        distance: point.distance,
+        walkTime: point.walkTime
+      }))
+  }));
 };
 
 // Create and export the model
