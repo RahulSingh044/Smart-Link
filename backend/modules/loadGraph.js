@@ -12,8 +12,11 @@ async function loadGraph(trip, route) {
 
     const payload = JSON.stringify({
       tripId: String(trip._doc._id),
+      busName: "Kuch Bhi",
+      routeName: route.name,
+      stopName: stopData.pointId.name,
       nearbyStops: stopData.pointId.nearbyStops,
-      time: stop.expectedTime.toISOString(),
+      time: stop.expectedTime.getTime(),
     });
 
 

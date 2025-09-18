@@ -44,6 +44,7 @@ router.get('/search-route', async (req, res) => {
   try {
     const t = time ? new Date(time) : new Date();
     const route = await findEarliestPath(origin, destination, t.getTime());
+    console.log(route); 
     res.status(200).json({ success: true, data: route });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -108,7 +109,7 @@ async function generateTripsForToday() {
 }
 
 // Schedule cron job to run daily at 00:00
-cron.schedule("31 0 * * *", async () => {
+cron.schedule("16 14 * * *", async () => {
   try {
     await generateTripsForToday();
   } catch (err) {

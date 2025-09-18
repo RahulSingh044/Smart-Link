@@ -28,7 +28,10 @@ function reconstructPath(node) {
     } else {
       segments.unshift({
         tripId: current.tripId,
-        routeId: current.routeId,
+        routeName: current.routeName,
+        busName: current.busName,
+        stopName: current.stopName,
+        time: current.time,
         fromStopId: parent.stopId,
         toStopId: current.stopId,
         arrivalTime: current.arrivalTime
@@ -68,7 +71,7 @@ module.exports = async function findEarliestPath(startStopId, destStopId, startT
     const trips = await getTripsForStop(stopId, arrivalTime);
     for (const trip of trips) {
 
-      const { tripId, nearbyStops } = trip;
+      const { tripId, nearbyStops, routeName, busName, time, stopName } = trip;
       for (const nb of nearbyStops) {
         const walkMinutes = parseInt(nb.walktime, 10);
         const nextArrival = arrivalTime + walkMinutes * 60 * 1000;
@@ -76,7 +79,7 @@ module.exports = async function findEarliestPath(startStopId, destStopId, startT
         pq.enqueue({
           stopId: nb.pointId,
           arrivalTime: nextArrival,
-          tripId,
+          tripId, routeName, busName, time, stopName,
           parent: node
         });
       }
