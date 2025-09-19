@@ -2,15 +2,16 @@
 import {useState, useEffect} from 'react';
 import { fetchRouteById } from "@/utils/api"
 
-export const getRoute = (id) => {
+export const getRoute = (origin, dest, time = null) => {
     const [route, setRoute] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const fetchRoute = async(currentId = id) => {
+    const fetchRoute = async() => {
         setLoading(true);
         try {
-            const res = await fetchRouteById(currentId);
+            console.log("Hook To", origin, dest, time)
+            const res = await fetchRouteById(origin, dest, time);
             console.log("Hook Route", res.data)
             setRoute(res.data)
         } catch (error) {
@@ -19,10 +20,9 @@ export const getRoute = (id) => {
             setLoading(false);
         }
     }
-
+    
     useEffect(() => {
         fetchRoute();
-    }, [id])
-
+    }, [])
     return { route, loading, error };
 }

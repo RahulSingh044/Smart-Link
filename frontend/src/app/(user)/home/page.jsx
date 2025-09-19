@@ -50,7 +50,11 @@ export default function HomePage() {
 
     const handleSearch = () => {
         // console.log("Search Result", from , to)
-        router.push(`/bus-search?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+        if(fromSuggestions.length > 1 || toSuggestions.length > 1){
+            window.alert("Please select a valid stations")
+        }
+        const time = "2025-09-18T00:00:00.000Z"; // Hard Coded Time
+        router.push(`/bus-search?origin=${encodeURIComponent(fromSuggestions[0]._id)}&dest=${encodeURIComponent(toSuggestions[0]._id)}&time=${time}`);
     };
 
     // Suggestion logic for 'from' input

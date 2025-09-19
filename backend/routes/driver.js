@@ -255,7 +255,7 @@ router.post('/', validateDriver, async (req, res) => {
     }
 
     const {
-      id,
+      _id,
       name,
       licenseNumber,
       phone,

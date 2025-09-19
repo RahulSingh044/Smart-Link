@@ -71,9 +71,9 @@ export const fetchTrip = async (id) => {
     }
 }
 
-export const fetchRouteById = async (id = R003) => {
+export const fetchRouteById = async (origin, dest, time = null) => {
     try {
-        const res = await axios.get(`${API_BASE_URL}/api/routes/${id}`);
+        const res = await axios.get(`${API_BASE_URL}/api/search-route?origin=${origin}&destination=${dest}&time=${time}`);
         return res.data;
     } catch (error) {
         console.log(error);
