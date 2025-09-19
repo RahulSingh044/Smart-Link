@@ -7,6 +7,7 @@ const TripSchema = new mongoose.Schema({
     journey: [
         {
             name: { type: String, required: true },
+            pointId: { type: String, required: true },
             coordinates: { type: [Number], required: true },
             expectedTime: { type: Date, required: true },
             arrivedTime: { type: Date },

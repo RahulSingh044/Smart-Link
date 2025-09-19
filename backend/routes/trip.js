@@ -46,15 +46,15 @@ router.get('/', async (req, res) => {
             });
         }
         let stops = [];
-        let start = fromStopId && toStopId ? false : true;
+        let start = fromStopId ? false : true;
         for (let i = 0; i < trips.journey.length; i++) {
-            if (trips.journey[i]._id == fromStopId) {
+            if (trips.journey[i].pointId == fromStopId) {
                 start = true;
             }
             if (start) {
                 stops.push(trips.journey[i]);
             }
-            if (start && trips.journey[i]._id == toStopId) break;
+            if (start && trips.journey[i].pointId == toStopId) break;
         }
 
         res.status(200).json({

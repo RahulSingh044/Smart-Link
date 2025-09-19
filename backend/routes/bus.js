@@ -96,17 +96,8 @@ router.get('/:busNumber', async (req, res) => {
 
     // Find the bus by its busNumber
     const bus = await Bus.findOne({ busNumber: busNumber })
-      .populate('currentTrip', 'startStation endStation scheduledTime')
-      .populate({
-        path: 'daySchedule.tripId',
-        select: 'startStation endStation scheduledTime',
-        populate: {
-          path: 'routeId',
-          select: 'name code'
-        }
-      })
       .populate('driverId', 'name phone')
-      .lean({ virtuals: true });
+      .exec();
 
     if (!bus) {
       return res.status(404).json({
