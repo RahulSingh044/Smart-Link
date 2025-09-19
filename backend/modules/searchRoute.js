@@ -19,20 +19,21 @@ async function getTripsForStop(stopId, afterMs) {
 async function reconstructPath(node) {
   const segments = [];
   let current = node;
+
   const key = `trips:${node.tripId}:${node.stopId}:eta`;
   const endNode = await client.zRangeByScore(key, node.arrivalTime, '+inf');
   if (!endNode.length) return [];
   let endObj = JSON.parse(endNode[0]);
   let { time, stopName, fare } = endObj;
+
   while (current && current.parent) {
     const parent = current.parent;
-
     if (segments.length && segments[0].tripId === current.tripId) {
       // extend previous segment
       segments[0].fromstopId = parent.stopId;
-      segments[0].fromStopName = stopName;
-      segments[0].departureTime = time;
-      segments[0].fare = fare;
+      segments[0].fromStopName = current.stopName;
+      segments[0].departureTime = current.arrivalTime;
+      segments[0].fare += fare-current.fare;
     } else {
       segments.unshift({
         tripId: current.tripId,
@@ -43,13 +44,13 @@ async function reconstructPath(node) {
         departureTime: current.arrivalTime,
         tostopId: current.stopId,
         toStopName: stopName,
-        fare: fare,
+        fare: fare-current.fare,
         arrivalTime: time
       });
     }
-    segments[0].fromStopName = stopName;
-    segments[0].departureTime = time;
-    segments[0].fare = fare;
+    // segments[0].fromStopName = stopName;
+    // segments[0].departureTime = time;
+    // segments[0].fare = fare;
 
     time = current.arrivalTime;
     stopName = current.stopName;
@@ -62,7 +63,7 @@ async function reconstructPath(node) {
 
 module.exports = async function findAllTrips(startStopId, destStopId, startTimeMs) {
 
-  const pq = new MinPriorityQueue((x) => x.arrivalTime);
+  const pq = new MinPriorityQueue((x) => (x.changes, x.arrivalTime));
 
   pq.enqueue({
     stopId: startStopId,
@@ -105,15 +106,14 @@ module.exports = async function findAllTrips(startStopId, destStopId, startTimeM
 
     const trips = await getTripsForStop(stopId, arrivalTime);
     for (const trip of trips) {
-      const { tripId, nearbyStops, routeName, fare, busNumber, time, stopName } = trip;
+      const { tripId, last, nearbyStops, routeName, fare, busNumber, time, stopName } = trip;
+      if(last) continue;
       for (const nb of nearbyStops) {
-        const nextArrival = time;
-
         pq.enqueue({
           stopId: nb.pointId,
           stopName: stopName, // keep stop name if available
+          arrivalTime: time,
           fare: fare,
-          arrivalTime: nextArrival,
           tripId, routeName, busNumber, time,
           parent: node,
           changes: node.tripId && node.tripId !== tripId ? node.changes + 1 : node.changes
@@ -122,7 +122,7 @@ module.exports = async function findAllTrips(startStopId, destStopId, startTimeM
     }
   }
   // filter out trips with much higher durations
-  const filtered = results.filter(r => r.duration <= bestDuration + 3600000);
+  // const filtered = results.filter(r => r.duration <= bestDuration + 3600000);
   // return only arrays of segments
-  return filtered.map(r => r.path);
+  return results.map(r => r.path);
 };

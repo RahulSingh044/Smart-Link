@@ -11,6 +11,7 @@ async function loadGraph(trip, route, k) {
     const key = `trips:${tripId}:${stopId}:eta`;
     const payload = JSON.stringify({
       tripId: String(trip._doc._id),
+      last: i < trip.journey.length-1 ? false : true,
       busNumber: route.buses[k].busId.busNumber,
       fare: route.fares[k][i],
       routeName: route.name,
