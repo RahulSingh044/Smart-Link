@@ -13,7 +13,9 @@ const TripSchema = new mongoose.Schema({
             arrivedTime: { type: Date },
         }
     ],
-    nextStopIndex: { type: Number, default: 0 }
+    nextStopIndex: { type: Number, default: 0 },
+    completed: { type: Boolean, default: false },
+    isStarted: { type: Boolean, default: false }
 });
 
 

@@ -73,12 +73,10 @@ const routeSchema = new mongoose.Schema({
   timing: {
     totalDuration: {
       type: Number, // in minutes
-      required: true,
       min: 1
     },
     frequency: {
       type: Number, // minutes between trips
-      required: true,
       min: 10
     },
     firstTrip: {
