@@ -22,6 +22,7 @@ const QuickActionButton = ({ icon, label }) => (
 export default function HomePage() {
     const [from, setFrom] = useState("");
     const [to, setTo] = useState("");
+    const [searchId, setSearchId] = useState({ origin: "", destination: ""})
     const [fromSuggestions, setFromSuggestions] = useState([]);
     const [toSuggestions, setToSuggestions] = useState([]);
     const [showFromSuggestions, setShowFromSuggestions] = useState(false);
@@ -31,7 +32,7 @@ export default function HomePage() {
     const [routeGeometry, setRouteGeometry] = useState(null);
 
     const { station, loading, error } = useStation(1, 1000);
-    const { data } = useNearby();
+    const { data } = useNearby(74.872, 31.634);
     console.log("Nearby", data)
 
     const router = useRouter();
@@ -40,7 +41,7 @@ export default function HomePage() {
     useEffect(() => {
         if (!selectedStop) return;
 
-        const start = { lon: 75.829387, lat: 30.236568 }; // Example current location
+        const start = { lon: 74.872, lat: 31.634 }; // Example current location
         const end = { lon: selectedStop.lon, lat: selectedStop.lat };
 
         getRoute(start, end)
@@ -49,13 +50,10 @@ export default function HomePage() {
     }, [selectedStop]);
 
     const handleSearch = () => {
-        // console.log("Search Result", from , to)
-        if(fromSuggestions.length > 1 || toSuggestions.length > 1){
-            window.alert("Please select a valid stations")
-        }
-        const time = "2025-09-18T00:00:00.000Z"; // Hard Coded Time
-        router.push(`/bus-search?origin=${encodeURIComponent(fromSuggestions[0]._id)}&dest=${encodeURIComponent(toSuggestions[0]._id)}&time=${time}`);
-    };
+        const now = new Date();
+        const time = now.toUTCString();
+        router.push(`/bus-search?origin=${encodeURIComponent(searchId.origin)}&dest=${encodeURIComponent(searchId.destination)}&time=${time}`);
+    }
 
     // Suggestion logic for 'from' input
     useEffect(() => {
@@ -112,7 +110,7 @@ export default function HomePage() {
                                         <li
                                             key={s._id || s.id || idx}
                                             className="px-4 py-2 cursor-pointer hover:bg-blue-100"
-                                            onMouseDown={() => { setFrom(s.name); setShowFromSuggestions(false); }}
+                                            onMouseDown={() => { setFrom(s.name); setSearchId(prev => ({ ...prev, origin: s._id })); ;setShowFromSuggestions(false); }}
                                         >
                                             {s.name}
                                         </li>
@@ -136,7 +134,7 @@ export default function HomePage() {
                                         <li
                                             key={s._id || s.id || idx}
                                             className="px-4 py-2 cursor-pointer hover:bg-blue-100"
-                                            onMouseDown={() => { setTo(s.name); setShowToSuggestions(false); }}
+                                            onMouseDown={() => { setTo(s.name); setSearchId(prev => ({ ...prev, destination: s._id })); setShowToSuggestions(false); }}
                                         >
                                             {s.name}
                                         </li>
@@ -165,13 +163,11 @@ export default function HomePage() {
                         {data.map((nearby, index) => {
                             const lon = nearby.location.coordinates[0];
                             const lat = nearby.location.coordinates[1];
-                            const distance = getDistanceFromLatLon(30.236568, 75.829387, lat, lon);
+                            const distance = getDistanceFromLatLon(31.634, 74.872, lat, lon);
                             return (
                                 <NearbyStop
                                     key={index}
                                     name={nearby.name}
-                                    city={nearby.location.address.city}
-                                    street={nearby.location.address.street}
                                     distance={distance}
                                     onClick={() => setSelectedStop({ lat, lon })}
                                 />

@@ -14,7 +14,6 @@ export function useBusDetails(busNumber, initialData = null) {
         setIsLoading(true);
         try {
             const res = await getBusDataById(busNumber);
-            console.log("Fetched Bus Data:", res.data);
             setBusData(res.data);
         } catch (err) {
             console.error("Error fetching bus:", err.response?.data || err.message);

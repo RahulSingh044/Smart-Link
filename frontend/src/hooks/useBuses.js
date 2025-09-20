@@ -12,7 +12,6 @@ export const useBus = (page = 1, pageSize = 10) => {
     setLoading(true);
     try {
       const res = await getBuses(currentPage, pageSize);
-      console.log(res)
       setData(res.data);
       setCount(res.counts);
       setTotalPages(res.pagination.totalPages);
