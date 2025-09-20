@@ -3,71 +3,50 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, InfoIcon } from "lucide-react";
-import RouteMap from "./_components/RouteMap";
 import StopTimeline from './_components/StopTimeline';
 import BusTrackingSkeleton from './_components/BusTrackingLoadingSkeleton';
-import { getTripData } from '@/app/utils/getTripById';
+import useTrips from '@/hooks/useTrips';
+import { getBusDataById } from '@/utils/api';
+import dynamic from 'next/dynamic';
+
+// Dynamically import RouteMap with no SSR
+const RouteMap = dynamic(() => import("./_components/RouteMap"), { ssr: false });
 
 export default function BusTrackingPage() {
-  const { busId } = useParams()
   const router = useRouter();
-  const [trip, setTrip] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [routeId, setRouteId] = useState(null);
+  const { busId } = useParams();
 
+  const [stop, setStop] = useState(null);
+  const [busData, setBusData] = useState({});
+  const [storedTrip, setStoredTrip] = useState(null);
+
+  // Load currentTrip from localStorage
   useEffect(() => {
-    async function fetchTrip() {
-      try {
-        if (!busId) return;
-        const tripRes = await getTripData(busId);
-        setRouteId(tripRes.routeId?.code)
-        console.log("Trip page", tripRes)
-        setTrip(tripRes);
-      } catch (err) {
-        console.error('Failed to fetch trip data:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchTrip();
+    const trip = localStorage.getItem("currentTrip");
+    if (trip) setStoredTrip(JSON.parse(trip));
   }, []);
 
-  if (loading || !trip) {
-    return <BusTrackingSkeleton />;
-  }
+  // Fetch stops when storedTrip is ready
+  const { data, loading } = useTrips(storedTrip || []);
+  useEffect(() => {
+    if (!loading && data && data.length > 0) {
+      setStop(data);
+    }
+  }, [data, loading]);
 
-  // ✅ Normalize bus details
-  const bus = {
-    route: trip?.routeName || 'Route',
-    origin: trip?.startStation?.name || 'Origin',
-    destination: trip?.endStation?.name || 'Destination',
-    busNumber: trip?.busId?.busNumber || trip?.bus?.busNumber || 'N/A',
-    estimatedArrival: trip?.estimatedArrival || 'N/A',
-    minutesRemaining: trip?.minutesRemaining || 'N/A',
-    status: trip?.status || 'Unknown',
-    stops: trip?.stops || [],
-  };
-
-  // ✅ Convert trip stops into a normalized array for RouteMap
-  const stops = [
-    {
-      name: bus.origin,
-      lat: trip?.startStation?.coordinates?.[1],
-      lng: trip?.startStation?.coordinates?.[0],
-    },
-    ...(bus.stops || []).map((stop) => ({
-      name: stop?.name,
-      lat: stop?.coordinates?.[1],
-      lng: stop?.coordinates?.[0],
-    })),
-    {
-      name: bus.destination,
-      lat: trip?.endStation?.coordinates?.[1],
-      lng: trip?.endStation?.coordinates?.[0],
-    },
-  ].filter((s) => s.lat && s.lng); // remove invalid entries
-
-  console.log("BUSID PAJ", bus.busNumber);
+  // Fetch bus info
+  useEffect(() => {
+    if (!busId) return;
+    const fetchBusData = async () => {
+      try {
+        const res = await getBusDataById(busId);
+        setBusData(res.data);
+      } catch (err) {
+        console.error("Bus fetch failed:", err);
+      }
+    }
+    fetchBusData();
+  }, [busId]);
 
   return (
     <div className="bg-gray-100 min-h-screen flex flex-col">
@@ -77,10 +56,7 @@ export default function BusTrackingPage() {
           <ArrowLeft />
         </button>
         <div className="flex-1 text-center">
-          <h1 className="font-semibold text-lg">{bus.route}</h1>
-          <p className="text-sm text-gray-500">
-            {bus.origin} → {bus.destination}
-          </p>
+          <p className="text-sm text-gray-500"></p>
         </div>
         <button className="text-blue-600 flex items-center space-x-1">
           <InfoIcon />
@@ -89,46 +65,29 @@ export default function BusTrackingPage() {
       </div>
 
       {/* Map Section */}
-      <div className="w-full h-screen">
-        <RouteMap
-          stops={stops}
-          busNumber={bus.busNumber}
-        />
+      <div className="w-full h-[400px]">
+        {stop ? (
+          <RouteMap stops={stop} busNumber={busData.busNumber} />
+        ) : (
+          <BusTrackingSkeleton />
+        )}
       </div>
 
-
       {/* Details Section */}
-      {/* <div className="flex-1 bg-white rounded-t-2xl shadow-lg p-4 -mt-4 relative z-10 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-sm text-gray-500">
-              Estimated Arrival at {bus.destination}
-            </p>
-            <p className="text-3xl font-bold flex items-baseline">
-              {bus.estimatedArrival}
-              <span className="ml-2 text-base font-normal text-gray-600">
-                ({bus.minutesRemaining})
-              </span>
-            </p>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="text-4xl">🚌</span>
-            <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-semibold">
-              {bus.status}
-            </span>
-          </div>
-        </div> */}
-
-        {/* <p className="text-sm text-gray-500 mb-4">
+      <div className="flex-1 bg-white rounded-t-2xl shadow-lg p-4 -mt-4 relative z-10 overflow-y-auto">
+        <p className="text-sm text-gray-500 mb-4">
           Bus No:{" "}
           <span className="font-semibold text-gray-800">
-            {bus.busNumber}
+            {busData.busNumber || "Loading..."}
           </span>
-        </p> */}
+        </p>
 
-        {/* Stop Timeline */}
-        {/* <StopTimeline stops={bus.stops} /> */}
-      {/* </div> */}
+        {data && data.length > 0 ? (
+          <StopTimeline trips={data} />
+        ) : (
+          <p className="text-gray-500">Loading stops...</p>
+        )}
+      </div>
     </div>
   );
 }

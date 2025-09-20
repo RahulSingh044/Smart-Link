@@ -26,7 +26,7 @@ export default function BusSearchPage() {
     <div className="bg-gray-100 min-h-screen p-4">
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mt-6 mb-4 text-sm text-gray-600">
-          <span>Found 1 buses</span>
+          <span>Found {trip.length} buses</span>
           <div className="flex space-x-4">
             <button className="flex items-center space-x-1">
               <ArrowUpDown size={18} />

@@ -1,3 +1,4 @@
+'use client';
 import React from 'react';
 import { useRouter } from 'next/navigation';
 // import { calculateDuration } from "@/app/utils/calculateDuration"
@@ -6,10 +7,11 @@ export default function BusCard({ trip }) {
   const router = useRouter();
 
   const handleTrackClick = () => {
-    console.log("Click track", bus.busId.busNumber)
-    router.push(`/bus-track/${encodeURIComponent(bus._id)}`)
+    console.log("Searched Trip", trip)
+    localStorage.setItem("currentTrip", JSON.stringify(trip));
+    console.log("Bus Num", trip.busNumber);
+    router.push(`/bus-track/${trip[0].busNumber}`)
   };
-  console.log(trip)
 
   // fare
   const fare = trip[trip.length - 1]?.fare;

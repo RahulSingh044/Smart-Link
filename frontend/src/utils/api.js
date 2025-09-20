@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:5000";
+const API_BASE_URL = "http://10.117.25.38:5000";
 export const getBuses = async (page = 1, pageSize = 10) => {
     const res = await axios.get(`${API_BASE_URL}/api/buses`, {
         params: { page, pageSize },
@@ -84,6 +84,19 @@ export const getNearbyStats = async (lon = 75.829387, lat = 30.236568, limit = 2
     try {
         const res = await axios.get(`${API_BASE_URL}/api/nearby`, {
             params: { lon, lat, limit }
+        });
+
+        return res.data;
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+export const getStops = async(tripId, fromStopId, toStopId) => {
+        console.log("Trip ", tripId , "fromStop", fromStopId, "toStop", toStopId);
+        try {
+        const res = await axios.get(`${API_BASE_URL}/api/trips`, {
+            params: { tripId, fromStopId, toStopId }
         });
 
         return res.data;

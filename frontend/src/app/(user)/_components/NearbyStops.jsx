@@ -1,7 +1,7 @@
 import React from "react";
 import { BusFront, Compass } from "lucide-react";
 
-const NearbyStop = ({ name, city, street, distance, onClick }) => {
+const NearbyStop = ({ name, distance, onClick }) => {
   return (
     <div
       onClick={onClick}
@@ -13,10 +13,10 @@ const NearbyStop = ({ name, city, street, distance, onClick }) => {
         </div>
         <div>
           <p className="font-semibold text-gray-800">{name}</p>
-          <p className="text-xs text-gray-600">
+          {/* <p className="text-xs text-gray-600">
             {street}, {city}
-          </p>
-          <p className="text-xs text-gray-500">{distance} away</p>
+          </p> */}
+          <p className="text-xs text-gray-500">{distance} km away</p>
         </div>
       </div>
       <Compass className="w-5 h-5 text-green-600 hover:text-green-800 cursor-pointer" />

@@ -1,7 +1,7 @@
 import React,{ useState, useEffect } from 'react'
 import { getNearbyStats } from "@/utils/api"
 
-export const useNearby = (long=75.829387, lat=30.236568) => {
+export const useNearby = (long, lat) => {
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -10,6 +10,7 @@ export const useNearby = (long=75.829387, lat=30.236568) => {
         setLoading(true);
         try {
             const res = await getNearbyStats(longi, lati);
+            console.log("Nearby api", res.data)
             setData(res.data.stops);
         } catch (error) {
             setError(error);
