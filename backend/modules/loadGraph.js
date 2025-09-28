@@ -5,24 +5,23 @@ async function loadGraph(trip, route, k) {
 
   // stringify all details for direct storage
   for (let i = 0; i < trip.journey.length; i++) {
-    const stop = trip.journey[i];
-    const stopData = route.journey[i];
-    const stopId = String(stopData.pointId._id);
+    const stopId = trip.journey[i].pointId;
     const key = `trips:${tripId}:${stopId}:eta`;
     const payload = JSON.stringify({
       tripId: String(trip._doc._id),
-      last: i < trip.journey.length-1 ? false : true,
       busNumber: route.buses[k].busId.busNumber,
-      fare: route.fares[k][i],
+      fare: i < trip.journey.length-1 ? route.fares[k][i+1] - route.fares[k][i] : 0, // fare between this stop and next stop
       routeName: route.name,
-      stopName: stopData.pointId.name,
-      nearbyStops: stopData.pointId.nearbyStops,
-      time: stop.expectedTime.getTime(),
+      thisStopName: trip.journey[i].name,
+      nextStopName: i < trip.journey.length-1 ? trip.journey[i+1].name : null,
+      nextStopId: i < trip.journey.length-1 ? String(trip.journey[i+1].pointId) : null,
+      thisStopTime: trip.journey[i].expectedTime.getTime(),
+      nextStopTime: i < trip.journey.length-1 ? trip.journey[i+1].expectedTime.getTime() : null,
     });
 
 
     // Insert or update only if the new sequence is greater
-    const etaMs = stop.expectedTime.getTime(); // absolute UTC ms
+    const etaMs = trip.journey[i].expectedTime.getTime(); // absolute UTC ms
     await client.zAdd(key, { score: etaMs, value: payload });
   }
 

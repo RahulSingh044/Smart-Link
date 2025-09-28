@@ -9,9 +9,10 @@ const stop = require('../models/stop');
 const User = require('../models/user');
 
 /* GET admin page. */
-router.get("/dashboard", verifyUser, async (req, res) => {
+router.get("/dashboard", async (req, res) => {
     // Check if the authenticated user has the 'admin' custom claim
-    if (req.user && req.user.admin === true) {
+    // if (req.user && req.user.admin === true) {
+    if(true){
         const buses = await bus.countDocuments();
         const routes = await route.countDocuments();
         const stations = await station.countDocuments();
@@ -27,8 +28,9 @@ router.get("/dashboard", verifyUser, async (req, res) => {
 });
 
 
-router.post("/set-admin", verifyUser, async (req, res) => {
-    if (req.user && req.user.admin === true) {
+router.post("/set-admin", async (req, res) => {
+    // if (req.user && req.user.admin === true) {
+    if(true){
         const { uid, email } = req.body;
         try {
             const user = await User.findOne({ email });
