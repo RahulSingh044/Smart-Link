@@ -2,12 +2,11 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
-const TripHistory = require('../models/history');
 const Bus = require('../models/bus');
 const Trip = require('../models/trip');
 
 // Configuration for the external server
-const EXTERNAL_SERVER_URL = process.env.EXTERNAL_SERVER_URL || 'http://10.21.139.67:5500/eta';
+const EXTERNAL_SERVER_URL = process.env.EXTERNAL_SERVER_URL || 'http://10.117.25.67:5000/eta';
 
 // Function to calculate distance between two points
 function calculateDistance(point1, point2) {
@@ -66,14 +65,14 @@ router.post('/', async (req, res) => {
         const gpsData = req.body;
         const currentTime = new Date(gpsData.lastUpdated || new Date());
 
-        if (!gpsData.busId || !gpsData.latitude || !gpsData.longitude) {
+        if (!gpsData.busNumber || !gpsData.latitude || !gpsData.longitude) {
             return res.status(400).json({ success: false });
         }
-        console.log('Received GPS Data:', gpsData);
+        // console.log('Received GPS Data:', gpsData);
 
 
         const bus = await Bus.findOneAndUpdate(
-            { busNumber: gpsData.busId },
+            { busNumber: gpsData.busNumber },
             {
                 location: {
                     latitude: gpsData.latitude,
@@ -93,62 +92,11 @@ router.post('/', async (req, res) => {
             return res.status(200).json({ success: true });
         }
 
-        let tripHistory = await TripHistory.findOne({
-            historyId: gpsData.tripInstanceId,
-            completed: false
-        });
-
-        if (!tripHistory && gpsData.speed > 0) {
-            const activeTrip = await Trip.findOne({ busId: bus._id }).populate('routeId');
-
-            if (activeTrip) {
-                // base date = current trip day
-                const baseDate = new Date(currentTime);
-                const historyId = `${activeTrip._id}_${baseDate.toISOString().slice(0, 10).replace(/-/g, "")}`;
-
-                // idempotent create-or-return existing
-                tripHistory = await TripHistory.findOneAndUpdate(
-                    { historyId }, // unique key prevents duplicates
-                    {
-                        $setOnInsert: {
-                            historyId,
-                            tripId: activeTrip._id,
-                            busId: bus._id,
-                            routeId: activeTrip.routeId._id,
-                            date: baseDate.setHours(0, 0, 0, 0),
-                            startStation: {
-                                coordinates: activeTrip.startStation.coordinates,
-                                expectedTime: getDateTimeFromScheduled(
-                                    activeTrip.startStation.scheduledTime,
-                                    baseDate
-                                )
-                            },
-                            endStation: {
-                                coordinates: activeTrip.endStation.coordinates,
-                                expectedTime: getDateTimeFromScheduled(
-                                    activeTrip.endStation.scheduledTime,
-                                    baseDate
-                                )
-                            },
-                            stops: activeTrip.stops.map(stop => ({
-                                coordinates: stop.coordinates,
-                                expectedTime: getDateTimeFromScheduled(
-                                    stop.scheduledTime,
-                                    baseDate
-                                )
-                            }))
-                        }
-                    },
-                    { new: true, upsert: true }
-                );
-            }
-        }
-
-
-
         const currentLocation = { latitude: gpsData.latitude, longitude: gpsData.longitude };
 
-        if (!tripHistory.completed) {
+        const trip = await Trip.findById(gpsData.tripId);
+
+        if (!trip.completed) {
             // Send location data to external server
             try {
                 const response = await fetch(EXTERNAL_SERVER_URL, {
@@ -157,54 +105,37 @@ router.post('/', async (req, res) => {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        current_lat: gpsData.latitude,
-                        current_lon: gpsData.longitude,
-                        destination_lat: tripHistory.stops[tripHistory.nextStopIndex].coordinates[1],
-                        destination_lon: tripHistory.stops[tripHistory.nextStopIndex].coordinates[0],
-                        next_time: new Date(tripHistory.stops[tripHistory.nextStopIndex].expectedTime.getTime() + (330 * 60000)).toLocaleTimeString('en-IN', { 
+                        "lat": gpsData.latitude,
+                        "lon": gpsData.longitude,
+                        "gps_time": new Date(currentTime.getTime() + (330 * 60000)).toLocaleTimeString('en-IN', { 
                             hour12: false, 
                             hour: '2-digit', 
                             minute: '2-digit',
                             timeZone: 'Asia/Kolkata'
                         }),
-                        gps_time: new Date(currentTime.getTime() + (330 * 60000)).toLocaleTimeString('en-IN', { 
-                            hour12: false, 
-                            hour: '2-digit', 
-                            minute: '2-digit',
-                            timeZone: 'Asia/Kolkata'
-                        })
+                        "stops": trip.journey
                     })
                 });
-
-                if (!response.ok) {
-                    console.error('Failed to send data to external server:', await response.text());
-                } else {
-                    const eta = await response.json();
-                    console.log('Successfully sent location data to external server', eta);
-                    // Update bus ETA
-                    await Bus.updateOne(
-                        { _id: bus._id },
-                        { $set: { eta: eta } }
-                    );
-                }
+                const data = await response.json();
+                console.log('Response from external server:', data);
             } catch (error) {
                 console.error('Error sending data to external server:', error);
                 // Continue processing even if external server request fails
             }
             const updates = {};
 
-            if (!tripHistory.isStarted) {
-                updates['startStation.arrivedTime'] = currentTime;
+            if (!trip.isStarted && gpsData.speed > 0) {
+                updates['journey.0.arrivedTime'] = currentTime;
                 updates['isStarted'] = true;
-            } else if (tripHistory.isStarted) {
-                if (tripHistory.nextStopIndex < tripHistory.stops.length) {
-                    const nextStop = tripHistory.stops[tripHistory.nextStopIndex];
+            } else if (trip.isStarted) {
+                if (trip.nextStopIndex < trip.journey.length) {
+                    const nextStop = trip.journey[trip.nextStopIndex];
                     if (isNearPoint(currentLocation, nextStop.coordinates)) {
-                        updates[`stops.${tripHistory.nextStopIndex}.arrivedTime`] = currentTime;
-                        updates['nextStopIndex'] = tripHistory.nextStopIndex + 1;
+                        updates[`journey.${trip.nextStopIndex}.arrivedTime`] = currentTime;
+                        updates['nextStopIndex'] = trip.nextStopIndex + 1;
                     }
-                } else if (!tripHistory.endStation.arrivedTime) {
-                    if (isNearPoint(currentLocation, tripHistory.endStation.coordinates)) {
+                } else if (!trip.endStation.arrivedTime) {
+                    if (isNearPoint(currentLocation, trip.endStation.coordinates)) {
                         updates['endStation.arrivedTime'] = currentTime;
                         updates['completed'] = true;
                     }
@@ -212,8 +143,8 @@ router.post('/', async (req, res) => {
             }
 
             if (Object.keys(updates).length > 0) {
-                await TripHistory.updateOne(
-                    { _id: tripHistory._id },
+                await trip.updateOne(
+                    { _id: trip._id },
                     { $set: updates }
                 );
             }

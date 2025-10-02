@@ -49,11 +49,6 @@ router.get('/', async (req, res) => {
     const routes = await Route.find()
       .skip(skip)
       .limit(limit)
-      .populate({
-        path: 'journey.pointId',
-        select: 'location name',
-        model: doc => mongoose.model(doc.journey.pointType)
-      })
       .lean();
 
     res.json({
@@ -67,6 +62,7 @@ router.get('/', async (req, res) => {
       }
     });
   } catch (err) {
+    console.log(err.message);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch routes',
@@ -206,14 +202,10 @@ router.post('/', async (req, res) => {
       // Create route with generated trip times and initial fares
       const routeData = {
         ...route,
-        trips: tripTimes,
         fares: [fares]  // Initial fare structure with zeros
       };
 
       createdRoute = await Route.create(routeData);
-
-      // Update route connectivity
-      await createdRoute.constructor.updateRouteConnectivity(createdRoute._id);
     } catch (insertError) {
       if (insertError.code === 11000) {
         // Duplicate key error
