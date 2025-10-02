@@ -88,6 +88,7 @@ async function generateTripsForToday() {
         const offsetMinutes = getTimeDifferenceInMinutes(tripTimes[0], tripTimes[idx]);
         return {
           name: point.pointId.name,
+          pointId: point.pointId._id,
           coordinates: point.pointId.location.coordinates, // TODO: replace with actual stop coordinates if available
           expectedTime: new Date(startTime.getTime() + offsetMinutes * 60000),
         };
@@ -108,7 +109,7 @@ async function generateTripsForToday() {
 }
 
 // Schedule cron job to run daily at 00:00
-cron.schedule("35 15 * * *", async () => {
+cron.schedule("04 18 * * *", async () => {
   try {
     await generateTripsForToday();
   } catch (err) {
