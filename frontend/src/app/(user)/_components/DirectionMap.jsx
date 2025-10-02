@@ -24,7 +24,10 @@ export default function DirectionsMap({ lon, lat }) {
   // Default icon
   const DefaultIcon = L.icon({
     iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    // shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [30,30],
+    iconAnchor:[16, 32],
+    popupAnchor:[0, -32]
   });
   L.Marker.prototype.options.icon = DefaultIcon;
 

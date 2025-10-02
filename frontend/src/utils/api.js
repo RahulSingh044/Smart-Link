@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://10.117.25.38:5000";
+const API_BASE_URL = "http://localhost:5000";
 export const getBuses = async (page = 1, pageSize = 10) => {
     const res = await axios.get(`${API_BASE_URL}/api/buses`, {
         params: { page, pageSize },
